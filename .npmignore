@@ -1,0 +1,78 @@
+# Source files (use built dist/ instead)
+src/
+tests/
+*.test.ts
+*.spec.ts
+
+# Development files
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build tools
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.eslintrc.json
+.prettierrc.json
+
+# Documentation (keep README.md)
+ARCHITECTURE.md
+CLI_AUTO_DETECTION.md
+CLI_MIGRATION_COMPLETE.md
+CODEX_CLI_MIGRATION.md
+FINAL_PROJECT_SUMMARY.md
+FIXES_SUMMARY.md
+IMPLEMENTATION_GUIDE.md
+IMPLEMENTATION_STATUS.md
+MIGRATION_SUMMARY.md
+PROJECT_SUMMARY.md
+ROUND2_FIXES.md
+ROUND3_FIXES.md
+SPECIFICATIONS.md
+USAGE_EXAMPLE.md
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build outputs (keep dist/)
+build/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cache
+.cache/
+.eslintcache
+.prettier-cache
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+nul
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
