@@ -1,4 +1,10 @@
-# Code Review MCP Server
+# AI Code Review MCP Server
+
+[![CI](https://github.com/physics91/ai-code-review-mcp/workflows/CI/badge.svg)](https://github.com/physics91/ai-code-review-mcp/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/physics91/ai-code-review-mcp/pulls)
 
 A comprehensive Model Context Protocol (MCP) server that provides AI-powered code review capabilities using both Codex CLI and Gemini CLI. This server enables intelligent, automated code analysis with support for multiple AI reviewers, finding aggregation, and detailed security and performance assessments.
 
