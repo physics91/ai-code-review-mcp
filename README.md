@@ -1,6 +1,8 @@
 # AI Code Review MCP Server
 
 [![CI](https://github.com/physics91/ai-code-review-mcp/workflows/CI/badge.svg)](https://github.com/physics91/ai-code-review-mcp/actions)
+[![npm version](https://img.shields.io/npm/v/code-review-mcp.svg)](https://www.npmjs.com/package/code-review-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/code-review-mcp.svg)](https://www.npmjs.com/package/code-review-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
@@ -47,8 +49,14 @@ A comprehensive Model Context Protocol (MCP) server that provides AI-powered cod
 ### From NPM (Recommended)
 
 ```bash
+# Install globally
 npm install -g code-review-mcp
+
+# Or use directly with npx
+npx code-review-mcp
 ```
+
+**NPM Package**: [code-review-mcp](https://www.npmjs.com/package/code-review-mcp)
 
 ### From Source
 
