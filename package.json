@@ -1,0 +1,85 @@
+{
+  "name": "code-review-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for AI-powered code review using Codex and Gemini",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "code-review-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "watch": "tsup --watch",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --coverage --run",
+    "test:ui": "vitest --ui",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "code-review",
+    "ai",
+    "codex",
+    "gemini",
+    "static-analysis",
+    "code-quality"
+  ],
+  "author": "physics91",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.0",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1",
+    "execa": "^8.0.1",
+    "cosmiconfig": "^9.0.0",
+    "uuid": "^9.0.1",
+    "p-retry": "^6.1.0",
+    "p-queue": "^8.0.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vitest/coverage-v8": "^1.1.0",
+    "@vitest/ui": "^1.1.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "prettier": "^3.1.1",
+    "tsup": "^8.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0",
+    "msw": "^2.0.11"
+  },
+  "files": [
+    "dist",
+    "config",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/physics91/ai-code-review-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/physics91/ai-code-review-mcp/issues"
+  },
+  "homepage": "https://github.com/physics91/ai-code-review-mcp#readme"
+}

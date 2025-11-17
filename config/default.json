@@ -1,0 +1,66 @@
+{
+  "$schema": "./schema.json",
+  "server": {
+    "name": "code-review-mcp",
+    "version": "1.0.0",
+    "logLevel": "info",
+    "transport": "stdio"
+  },
+  "codex": {
+    "enabled": true,
+    "cliPath": "auto",
+    "timeout": 60000,
+    "retryAttempts": 3,
+    "retryDelay": 1000,
+    "maxConcurrent": 1,
+    "model": null,
+    "args": []
+  },
+  "gemini": {
+    "enabled": true,
+    "cliPath": "auto",
+    "timeout": 60000,
+    "retryAttempts": 3,
+    "retryDelay": 1000,
+    "maxConcurrent": 1,
+    "model": null,
+    "args": []
+  },
+  "review": {
+    "maxCodeLength": 50000,
+    "includeContext": true,
+    "defaultLanguage": null,
+    "formats": ["markdown", "json"],
+    "defaultSeverity": "all",
+    "deduplication": {
+      "enabled": true,
+      "similarityThreshold": 0.8
+    }
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "initialDelay": 1000,
+    "maxDelay": 10000,
+    "backoffFactor": 2,
+    "retryableErrors": [
+      "TIMEOUT_ERROR",
+      "NETWORK_ERROR",
+      "CLI_EXECUTION_ERROR"
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "pretty": true,
+    "file": {
+      "enabled": false,
+      "path": "./logs/code-review-mcp.log",
+      "maxSize": "10M",
+      "maxFiles": 5
+    }
+  },
+  "cache": {
+    "enabled": false,
+    "ttl": 3600000,
+    "maxSize": 100
+  }
+}
