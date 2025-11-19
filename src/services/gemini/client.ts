@@ -151,14 +151,16 @@ export class GeminiReviewService {
       }
 
       // Wrap user prompt with JSON format instruction
-      const prompt = `${validated.prompt}
-
-IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text):
+      // Put JSON instruction FIRST to ensure Gemini doesn't ignore it
+      const prompt = `IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text, no explanations):
 {
   "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
   "overallAssessment": "string",
   "recommendations": ["string"]
-}`;
+}
+
+Review this code:
+${validated.prompt}`;
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
@@ -227,11 +229,12 @@ IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no add
 
     try {
       // Execute CLI using execa (secure, no shell injection)
-      // Using 'gemini -p' with prompt as argument
-      const result = await execa(cliPath, ['-p', prompt, ...args], {
+      // Pass prompt via stdin to avoid Windows CMD newline issues
+      const result = await execa(cliPath, args, {
         timeout,
         reject: true, // Throw on ANY non-zero exit code
         all: true,
+        input: prompt, // Send prompt via stdin
         env: {
           ...process.env,
           // MAJOR FIX #14: Use model config if specified

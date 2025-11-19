@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "code-review-mcp-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["E:\\ai-dev\\code-review-mcp\\dist\\index.js"],
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}
