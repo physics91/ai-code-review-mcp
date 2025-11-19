@@ -153,7 +153,7 @@ export class GeminiReviewService {
       // Wrap user prompt with JSON format instruction
       const prompt = `${validated.prompt}
 
-Please respond in JSON format with this structure:
+IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text):
 {
   "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
   "overallAssessment": "string",
