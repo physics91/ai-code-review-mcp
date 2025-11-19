@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { ErrorHandler } from '../core/error-handler.js';
 import type { Logger } from '../core/logger.js';
 import type { ServerConfig } from '../schemas/config.js';
+import type { ReviewResult } from '../schemas/review.js';
 import {
   createCodeReviewParamsSchema,
   CombinedReviewInputSchema,
@@ -36,6 +37,77 @@ export interface ToolDependencies {
   aggregator: ReviewAggregator;
   logger: Logger;
   config: ServerConfig;
+}
+
+/**
+ * Format review result as markdown
+ */
+function formatReviewAsMarkdown(result: ReviewResult): string {
+  const lines: string[] = [];
+
+  // Overall Assessment
+  lines.push('## Overall Assessment\n');
+  lines.push(result.overallAssessment);
+  lines.push('');
+
+  // Summary
+  if (result.summary.totalFindings > 0) {
+    lines.push('## Summary\n');
+    lines.push(`- **Total Issues:** ${result.summary.totalFindings}`);
+    if (result.summary.critical > 0) lines.push(`- **Critical:** ${result.summary.critical}`);
+    if (result.summary.high > 0) lines.push(`- **High:** ${result.summary.high}`);
+    if (result.summary.medium > 0) lines.push(`- **Medium:** ${result.summary.medium}`);
+    if (result.summary.low > 0) lines.push(`- **Low:** ${result.summary.low}`);
+    lines.push('');
+  }
+
+  // Findings
+  if (result.findings.length > 0) {
+    lines.push('## Findings\n');
+    result.findings.forEach((finding, index) => {
+      const severityEmoji = {
+        critical: '🔴',
+        high: '🟠',
+        medium: '🟡',
+        low: '🔵',
+      }[finding.severity] || '⚪';
+
+      lines.push(`### ${index + 1}. ${severityEmoji} ${finding.title}`);
+      lines.push(`**Severity:** ${finding.severity.toUpperCase()} | **Type:** ${finding.type}`);
+      if (finding.line) lines.push(`**Line:** ${finding.line}`);
+      lines.push('');
+      lines.push(`**Description:**`);
+      lines.push(finding.description);
+      lines.push('');
+      if (finding.suggestion) {
+        lines.push(`**Suggestion:**`);
+        lines.push(finding.suggestion);
+        lines.push('');
+      }
+      if (finding.code) {
+        lines.push('**Code:**');
+        lines.push('```');
+        lines.push(finding.code);
+        lines.push('```');
+        lines.push('');
+      }
+    });
+  }
+
+  // Recommendations
+  if (result.recommendations && result.recommendations.length > 0) {
+    lines.push('## Recommendations\n');
+    result.recommendations.forEach((rec) => {
+      lines.push(`- ${rec}`);
+    });
+    lines.push('');
+  }
+
+  // Metadata footer
+  lines.push('---');
+  lines.push(`*Review ID: ${result.reviewId} | Source: ${result.source}*`);
+
+  return lines.join('\n');
 }
 
 /**
@@ -179,7 +251,7 @@ export class ToolRegistry {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify(result, null, 2),
+              text: formatReviewAsMarkdown(result),
             },
           ],
         };
@@ -243,7 +315,7 @@ export class ToolRegistry {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify(result, null, 2),
+              text: formatReviewAsMarkdown(result),
             },
           ],
         };
@@ -329,7 +401,7 @@ export class ToolRegistry {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(aggregated, null, 2),
+            text: formatReviewAsMarkdown(aggregated as any),
           },
         ],
       };
