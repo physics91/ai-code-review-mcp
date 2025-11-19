@@ -220,10 +220,9 @@ export class GeminiReviewService {
 
     try {
       // Execute CLI using execa (secure, no shell injection)
-      // reject: true ensures ANY non-zero exit code throws an error
-      const result = await execa(cliPath, args, {
+      // Using 'gemini -p' with prompt as argument
+      const result = await execa(cliPath, ['-p', prompt, ...args], {
         timeout,
-        input: prompt,
         reject: true, // Throw on ANY non-zero exit code
         all: true,
         env: {
@@ -369,7 +368,7 @@ export class GeminiReviewService {
     }
 
     // Add output format
-    args.push('--format', 'json');
+    args.push('--output-format', 'json');
 
     return args;
   }

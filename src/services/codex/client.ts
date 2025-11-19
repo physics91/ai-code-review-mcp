@@ -229,10 +229,9 @@ export class CodexReviewService {
 
     try {
       // Execute CLI using execa (secure, no shell injection)
-      // Using 'codex exec' for non-interactive execution
-      const result = await execa(cliPath, ['exec', ...args], {
+      // Using 'codex e --json [flags] "prompt"' for JSON output
+      const result = await execa(cliPath, ['e', ...args, prompt], {
         timeout,
-        input: prompt,
         reject: true, // Throw on ANY non-zero exit code
         all: true,
         env: {

@@ -219,13 +219,12 @@ describe('CodexReviewService', () => {
         prompt: 'Review this code: test code',
       });
 
-      // Verify execa was called with correct arguments
+      // Verify execa was called with correct arguments - now using 'e' command with prompt as argument
       expect(execa).toHaveBeenCalledWith(
         'codex',
-        expect.arrayContaining(['exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only']),
+        expect.arrayContaining(['e', '--json', '--skip-git-repo-check', '--sandbox', 'read-only']),
         expect.objectContaining({
           timeout: 10000,
-          input: expect.any(String),
           reject: true,
           shell: false,
         })

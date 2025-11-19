@@ -185,19 +185,17 @@ describe('MCP Server Integration', () => {
 
       const result = await codexService.reviewCode({
         prompt: 'Review this code: function test() { return 1; }',
-        language: 'javascript',
       });
 
       expect(result.success).toBe(true);
       expect(result.source).toBe('codex');
 
-      // Verify execa was called correctly
+      // Verify execa was called correctly - now using 'e' command with prompt as last argument
       expect(execa).toHaveBeenCalledWith(
         'codex',
-        expect.arrayContaining(['exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only']),
+        expect.arrayContaining(['e', '--json', '--skip-git-repo-check', '--sandbox', 'read-only']),
         expect.objectContaining({
           timeout: 10000, // Match mockConfig.codex.timeout
-          input: expect.any(String),
           reject: true,
           shell: false,
         })
