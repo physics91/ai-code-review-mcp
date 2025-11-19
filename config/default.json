@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "logLevel": "info",
     "transport": "stdio"
   },

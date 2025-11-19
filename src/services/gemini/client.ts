@@ -23,7 +23,7 @@ import {
 } from '../../core/error-handler.js';
 import { type Logger } from '../../core/logger.js';
 import { RetryManager } from '../../core/retry.js';
-import { generateUUID, sanitizeParams, countLines, detectLanguage } from '../../core/utils.js';
+import { generateUUID, sanitizeParams } from '../../core/utils.js';
 import { GeminiResponseSchema, type GeminiResponse } from '../../schemas/responses.js';
 import { CodeReviewParamsSchema, ReviewResultSchema, type CodeReviewParams, type ReviewResult } from '../../schemas/tools.js';
 
@@ -150,8 +150,8 @@ export class GeminiReviewService {
         await this.initializeCLIPath();
       }
 
-      // Format prompt with severity filtering
-      const prompt = this.formatReviewPrompt(validated);
+      // Use prompt directly (user provides complete prompt)
+      const prompt = validated.prompt;
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
@@ -160,7 +160,7 @@ export class GeminiReviewService {
       );
 
       // Parse and structure response
-      const review = this.parseGeminiOutput(output, reviewId, validated);
+      const review = this.parseGeminiOutput(output, reviewId);
 
       // MAJOR FIX #6: Apply severity filtering if requested
       if (validated.options?.severity && validated.options.severity !== 'all') {
@@ -169,9 +169,6 @@ export class GeminiReviewService {
       }
 
       // Add metadata
-      const language = validated.language || detectLanguage(validated.code, validated.context?.fileName);
-      review.metadata.language = language;
-      review.metadata.linesOfCode = countLines(validated.code);
       review.metadata.reviewDuration = Date.now() - startTime;
 
       this.logger.info(
@@ -204,63 +201,6 @@ export class GeminiReviewService {
     }
   }
 
-  /**
-   * Format code review prompt for Gemini
-   * MAJOR FIX #6: Include severity filtering in prompt
-   */
-  private formatReviewPrompt(params: CodeReviewParams): string {
-    const { code, language, context, options } = params;
-
-    const focusAreas = context?.reviewFocus || ['all'];
-    const includeExplanations = options?.includeExplanations ?? true;
-    const severityFilter = options?.severity ?? 'all';
-    const detectedLanguage = language || detectLanguage(code, context?.fileName) || 'code';
-
-    const prompt = `You are an expert code reviewer. Perform a comprehensive code review of the following ${detectedLanguage}.
-
-## Code to Review:
-\`\`\`${detectedLanguage}
-${code}
-\`\`\`
-
-${context?.fileName ? `File: ${context.fileName}` : ''}
-${context?.projectType ? `Project Type: ${context.projectType}` : ''}
-
-## Review Focus Areas:
-${focusAreas.includes('all') ? '- All aspects (bugs, security, performance, style)' : focusAreas.map((area) => `- ${area}`).join('\n')}
-
-## Severity Filter:
-${severityFilter === 'all' ? '- Report all severity levels' : severityFilter === 'high' ? '- Report only CRITICAL and HIGH severity issues' : '- Report only CRITICAL, HIGH, and MEDIUM severity issues'}
-
-## Instructions:
-1. Analyze the code for issues in the specified focus areas
-2. Identify bugs, security vulnerabilities, performance issues, and style problems
-3. Assign severity levels: critical, high, medium, low, info
-${severityFilter !== 'all' ? `4. IMPORTANT: Only report issues that match the severity filter (${severityFilter})` : ''}
-4. Provide specific line numbers where applicable
-5. ${includeExplanations ? 'Include detailed explanations for each finding' : 'Provide concise descriptions'}
-6. Suggest concrete improvements
-
-## Output Format:
-Return ONLY a valid JSON object (no markdown, no additional text) with this structure:
-{
-  "findings": [
-    {
-      "type": "bug|security|performance|style|suggestion",
-      "severity": "critical|high|medium|low|info",
-      "line": <number> or null,
-      "title": "Brief title",
-      "description": "Detailed description",
-      "suggestion": "How to fix",
-      "code": "Suggested code fix (if applicable)"
-    }
-  ],
-  "overallAssessment": "Summary of code quality",
-  "recommendations": ["General recommendations"]
-}`;
-
-    return prompt;
-  }
 
   /**
    * Execute Gemini CLI command securely
@@ -439,8 +379,7 @@ Return ONLY a valid JSON object (no markdown, no additional text) with this stru
    */
   private parseGeminiOutput(
     output: string,
-    reviewId: string,
-    _params: CodeReviewParams
+    reviewId: string
   ): ReviewResult {
     try {
       // Clean output (remove ANSI codes, etc.)
@@ -472,8 +411,6 @@ Return ONLY a valid JSON object (no markdown, no additional text) with this stru
         overallAssessment: validated.overallAssessment,
         recommendations: validated.recommendations,
         metadata: {
-          language: undefined,
-          linesOfCode: 0,
           reviewDuration: 0,
         },
       };

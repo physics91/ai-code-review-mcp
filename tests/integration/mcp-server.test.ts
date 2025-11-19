@@ -184,7 +184,7 @@ describe('MCP Server Integration', () => {
       );
 
       const result = await codexService.reviewCode({
-        code: 'function test() { return 1; }',
+        prompt: 'Review this code: function test() { return 1; }',
         language: 'javascript',
       });
 
@@ -240,7 +240,7 @@ describe('MCP Server Integration', () => {
       );
 
       const result = await codexService.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(result.success).toBe(true);
@@ -267,7 +267,7 @@ describe('MCP Server Integration', () => {
 
       await expect(
         codexService.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/CLI path not in allowed list|Failed to validate CLI path/);
     });
@@ -296,7 +296,7 @@ describe('MCP Server Integration', () => {
 
       await expect(
         codexService.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('timed out');
     });

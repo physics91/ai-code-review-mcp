@@ -78,7 +78,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await service.reviewCode({
-        code: 'function test() { return null.value; }',
+        prompt: 'Review this code: function test() { return null.value; }',
         language: 'javascript',
       });
 
@@ -93,7 +93,7 @@ describe('CodexReviewService', () => {
     it('should validate input parameters', async () => {
       await expect(
         service.reviewCode({
-          code: '', // Invalid: empty code
+          prompt: '', // Invalid: empty prompt
         })
       ).rejects.toThrow();
     });
@@ -107,7 +107,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         service.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('Codex CLI exited with code 1');
     });
@@ -120,7 +120,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         service.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('Codex CLI timed out after');
     });
@@ -134,7 +134,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         service.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('No JSON found in Codex output');
     });
@@ -150,7 +150,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(result.success).toBe(true);
@@ -166,12 +166,10 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await service.reviewCode({
-        code: 'const x = 1;\nconst y = 2;',
-        language: 'javascript',
+        prompt: 'Review this code: const x = 1;\nconst y = 2;',
       });
 
-      expect(result.metadata.linesOfCode).toBe(2);
-      expect(result.metadata.language).toBe('javascript');
+      // Metadata fields language and linesOfCode are now optional since we use prompt-based API
       expect(result.metadata.reviewDuration).toBeGreaterThanOrEqual(0);
     });
 
@@ -199,7 +197,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(result.summary.totalFindings).toBe(4);
@@ -218,7 +216,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       // Verify execa was called with correct arguments
@@ -255,7 +253,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       await serviceWithModel.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(execa).toHaveBeenCalledWith(
@@ -289,7 +287,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
         options: {
           severity: 'high',
         },
@@ -321,7 +319,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       const result = await whitelistedService.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(result.success).toBe(true);
@@ -350,7 +348,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         invalidService.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/CLI path not in allowed list/);
     });
@@ -373,7 +371,7 @@ describe('CodexReviewService', () => {
       });
 
       const result = await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
       });
 
       expect(result.success).toBe(true);
@@ -416,7 +414,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         testService.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/Resolved CLI path not in allowed list/);
     });
@@ -431,7 +429,7 @@ describe('CodexReviewService', () => {
 
       // Per-request override with whitelisted path
       const result = await service.reviewCode({
-        code: 'test code',
+        prompt: 'Review this code: test code',
         options: {
           cliPath: '/usr/local/bin/codex',
         },
@@ -451,7 +449,7 @@ describe('CodexReviewService', () => {
 
       await expect(
         service.reviewCode({
-          code: 'test code',
+          prompt: 'Review this code: test code',
           options: {
             cliPath: '/evil/path/codex', // Not in whitelist
           },

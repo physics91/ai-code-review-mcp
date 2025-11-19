@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const ServerConfigSchema = z.object({
   server: z.object({
     name: z.string().default('code-review-mcp'),
-    version: z.string().default('1.0.3'),
+    version: z.string().default('1.0.4'),
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     transport: z.enum(['stdio', 'http']).default('stdio'),
   }),

@@ -37,28 +37,20 @@ export const ReviewSummarySchema = z.object({
 
 export const ReviewMetadataSchema = z.object({
   language: z.string().optional(),
-  linesOfCode: z.number(),
+  linesOfCode: z.number().optional(),
   reviewDuration: z.number(),
 });
 
 /**
- * Create Code Review Params Schema with configurable max code length
+ * Create Code Review Params Schema with configurable max prompt length
+ * Simplified to accept a single prompt parameter instead of structured code/context
  */
-export function createCodeReviewParamsSchema(maxCodeLength: number = 50000) {
+export function createCodeReviewParamsSchema(maxPromptLength: number = 100000) {
   return z.object({
-    code: z.string().min(1).max(maxCodeLength).describe('Source code to review'),
-    language: z.string().optional().describe('Programming language (auto-detect if not provided)'),
-    context: z
-      .object({
-        fileName: z.string().optional(),
-        projectType: z.string().optional(),
-        reviewFocus: z.array(ReviewFocusSchema).default(['all']),
-      })
-      .optional(),
+    prompt: z.string().min(1).max(maxPromptLength).describe('Prompt for code review (can include code, instructions, context, etc.)'),
     options: z
       .object({
         timeout: z.number().min(1000).max(300000).default(60000),
-        includeExplanations: z.boolean().default(true),
         severity: z.enum(['all', 'high', 'medium']).default('all'),
         cliPath: z.string().optional(),
       })
@@ -66,14 +58,14 @@ export function createCodeReviewParamsSchema(maxCodeLength: number = 50000) {
   });
 }
 
-// Default schema with 50000 max length (for backward compatibility)
-export const CodeReviewParamsSchema = createCodeReviewParamsSchema(50000);
+// Default schema with 100000 max length
+export const CodeReviewParamsSchema = createCodeReviewParamsSchema(100000);
 
-export const CombinedReviewInputSchema = CodeReviewParamsSchema.extend({
+export const CombinedReviewInputSchema = z.object({
+  prompt: z.string().min(1).max(100000).describe('Prompt for code review'),
   options: z
     .object({
       timeout: z.number().min(1000).max(300000).default(120000),
-      includeExplanations: z.boolean().default(true),
       severity: z.enum(['all', 'high', 'medium']).default('all'),
       parallelExecution: z.boolean().default(true),
       includeIndividualReviews: z.boolean().default(false),
