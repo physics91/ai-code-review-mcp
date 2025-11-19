@@ -420,9 +420,9 @@ Please respond in JSON format with this structure:
         try {
           const event = JSON.parse(line);
 
-          // Look for item.completed events with agent_message
+          // Look for item.completed events with agent_message (contains JSON response)
           if (event.type === 'item.completed' && event.item) {
-            if (event.item.type === 'agent_message' || event.item.type === 'reasoning') {
+            if (event.item.type === 'agent_message') {
               finalMessage = event.item.text || '';
             }
           }
