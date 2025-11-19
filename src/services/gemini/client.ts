@@ -401,7 +401,15 @@ ${validated.prompt}`;
         throw new ParseError('No JSON found in Gemini output');
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      let parsed = JSON.parse(jsonMatch[0]);
+
+      // Gemini CLI wraps response in {"response": "...", "stats": {...}}
+      // Extract the actual review JSON from the response field
+      if (parsed.response && typeof parsed.response === 'string') {
+        // Remove markdown code blocks (```json ... ```)
+        const responseText = parsed.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        parsed = JSON.parse(responseText);
+      }
 
       // Validate response against schema
       const validated = GeminiResponseSchema.parse(parsed);
