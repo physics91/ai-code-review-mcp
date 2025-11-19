@@ -1,12 +1,14 @@
 # Code Review MCP Server - Project Summary
 
+> **Note**: This document describes the project structure and deliverables as they existed during development. File references (e.g., `ARCHITECTURE.md`, `SPECIFICATIONS.md`) reflect the pre-reorganization layout. Current documentation is now organized under `docs/` - see [docs/README.md](../README.md) for the current structure.
+
 ## Executive Summary
 
 The Code Review MCP Server is a production-ready Model Context Protocol server that provides AI-powered code review capabilities by integrating both Codex CLI (via MCP tool) and Gemini CLI. The system follows a Specification-Driven Development (SDD) approach with comprehensive architecture documentation, type-safe implementation, and robust error handling.
 
 ## Key Deliverables
 
-### 1. Architecture Documentation (ARCHITECTURE.md)
+### 1. Architecture Documentation (../reference/architecture.md)
 
 **Comprehensive system design including:**
 
@@ -31,7 +33,7 @@ The Code Review MCP Server is a production-ready Model Context Protocol server t
 | Process Execution | execa | Safe child_process wrapper, no shell injection |
 | Testing | Vitest | Fast, modern testing framework |
 
-### 2. Technical Specifications (SPECIFICATIONS.md)
+### 2. Technical Specifications (../reference/SPECIFICATIONS.md)
 
 **Detailed implementation specifications for:**
 
@@ -192,43 +194,43 @@ Output: {
 
 ```
 code-review-mcp/
-├── src/
-│   ├── index.ts                    # Entry point
-│   ├── server.ts                   # MCP server setup
-│   ├── tools/                      # MCP tool implementations
-│   │   ├── registry.ts
-│   │   ├── codex-review.ts
-│   │   ├── gemini-review.ts
-│   │   └── combined-review.ts
-│   ├── services/                   # Core business logic
-│   │   ├── codex/
-│   │   ├── gemini/
-│   │   └── aggregator/
-│   ├── core/                       # Infrastructure
-│   │   ├── config.ts
-│   │   ├── logger.ts
-│   │   ├── error-handler.ts
-│   │   └── retry.ts
-│   ├── schemas/                    # Zod schemas
-│   └── types/                      # TypeScript types
-├── tests/                          # Test suites
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-├── config/                         # Configuration files
-├── docs/                           # Additional documentation
-├── package.json
-├── tsconfig.json
-├── tsup.config.ts
-├── .eslintrc.json
-├── .prettierrc.json
-├── .env.example
-├── .gitignore
-├── README.md                       # User documentation
-├── ARCHITECTURE.md                 # System architecture
-├── SPECIFICATIONS.md               # Technical specifications
-├── IMPLEMENTATION_GUIDE.md         # Development guide
-└── PROJECT_SUMMARY.md             # This file
++-- src/
+|   +-- index.ts                    # Entry point
+|   +-- server.ts                   # MCP server setup
+|   +-- tools/                      # MCP tool implementations
+|   |   +-- registry.ts
+|   |   +-- codex-review.ts
+|   |   +-- gemini-review.ts
+|   |   +-- combined-review.ts
+|   +-- services/                   # Core business logic
+|   |   +-- codex/
+|   |   +-- gemini/
+|   |   +-- aggregator/
+|   +-- core/                       # Infrastructure
+|   |   +-- config.ts
+|   |   +-- logger.ts
+|   |   +-- error-handler.ts
+|   |   +-- retry.ts
+|   +-- schemas/                    # Zod schemas
+|   +-- types/                      # TypeScript types
++-- tests/                          # Test suites
+|   +-- unit/
+|   +-- integration/
+|   +-- e2e/
++-- config/                         # Configuration files
++-- docs/                           # Additional documentation
++-- package.json
++-- tsconfig.json
++-- tsup.config.ts
++-- .eslintrc.json
++-- .prettierrc.json
++-- .env.example
++-- .gitignore
++-- README.md                       # User documentation
++-- ../reference/architecture.md                 # System architecture
++-- ../reference/SPECIFICATIONS.md               # Technical specifications
++-- ../guides/implementation-guide.md         # Development guide
++-- ../guides/project-summary.md             # This file
 ```
 
 ### 7. Development Workflow
@@ -352,19 +354,19 @@ code-review-mcp/
 
 ### 11. Documentation Deliverables
 
-1. **ARCHITECTURE.md** (13 sections, 800+ lines)
+1. **../reference/architecture.md** (13 sections, 800+ lines)
    - System design and component breakdown
    - Technology stack decisions
    - Security and performance considerations
    - Complete configuration reference
 
-2. **SPECIFICATIONS.md** (4 major components, 600+ lines)
+2. **../reference/SPECIFICATIONS.md** (4 major components, 600+ lines)
    - Detailed service implementations
    - Complete code examples
    - Error handling strategies
    - MCP server integration
 
-3. **IMPLEMENTATION_GUIDE.md** (5 phases, 800+ lines)
+3. **../guides/implementation-guide.md** (5 phases, 800+ lines)
    - Step-by-step development guide
    - Code examples and best practices
    - Testing strategies
@@ -566,6 +568,6 @@ All deliverables are complete and ready for implementation following the Specifi
 ---
 
 **Project Status:** Specification Complete - Ready for Implementation
-**Documentation Version:** 1.0.0
+**Documentation Version:** 1.0.1
 **Last Updated:** 2025-01-17
 **Total Documentation:** 5 comprehensive documents, 3000+ lines

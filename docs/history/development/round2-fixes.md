@@ -2,9 +2,9 @@
 
 This document details ALL fixes implemented in response to the Round 2 Codex review. Every issue has been addressed comprehensively to ensure production-ready code.
 
-## 🔴 CRITICAL ISSUES (All Fixed - Production Ready)
+## [CRITICAL] CRITICAL ISSUES (All Fixed - Production Ready)
 
-### 1. Real MCP Client Implementation ✅
+### 1. Real MCP Client Implementation [x]
 **Problem:** MCPToolClientImpl in src/index.ts just threw. Codex path never executed.
 
 **Fix:** Implemented actual MCP client using @modelcontextprotocol SDK
@@ -17,7 +17,7 @@ This document details ALL fixes implemented in response to the Round 2 Codex rev
   - Connection is non-blocking - server starts even if Codex unavailable
   - Configuration via `CODEX_MCP_SERVER_COMMAND` environment variable
 
-### 2. MCP Response Parsing ✅
+### 2. MCP Response Parsing [x]
 **Problem:** callCodexMCPTool/parseCodexResponse expected raw JSON string but got CallToolResult object
 
 **Fix:** Properly handle CallToolResult object structure
@@ -38,7 +38,7 @@ const textContent = result.content
   .join('\n');
 ```
 
-### 3. Review Status Store Wiring ✅
+### 3. Review Status Store Wiring [x]
 **Problem:** create/updateStatus/setResult/setError were NEVER called. Map stays empty.
 
 **Fix:** Wired status store throughout all tool handlers
@@ -67,7 +67,7 @@ this.reviewStatusStore.setResult(reviewId, result);
 this.reviewStatusStore.setError(reviewId, { code, message });
 ```
 
-### 4. maxCodeLength Configuration ✅
+### 4. maxCodeLength Configuration [x]
 **Problem:** CodeReviewParamsSchema hard-coded 50000, ignoring config
 
 **Fix:** Read from config and allow per-request override
@@ -85,7 +85,7 @@ const schema = createCodeReviewParamsSchema(maxCodeLength);
 const params = schema.parse(args);
 ```
 
-### 5. Gemini CLI Path Whitelist ✅
+### 5. Gemini CLI Path Whitelist [x]
 **Problem:** Whitelist had 4 hard-coded paths, ignored cliPath from config/request
 
 **Fix:** Derive whitelist from config and allow overrides
@@ -109,9 +109,9 @@ this.allowedCLIPaths = [
 ].filter(Boolean) as string[];
 ```
 
-## 🟡 MAJOR ISSUES (All Fixed - Production Concerns Addressed)
+## [MAJOR] MAJOR ISSUES (All Fixed - Production Concerns Addressed)
 
-### 6. Request Options Honored ✅
+### 6. Request Options Honored [x]
 **Problem:** options.timeout, severity, cliPath advertised but never used
 
 **Fix:** Honor all per-request options in both services
@@ -123,7 +123,7 @@ this.allowedCLIPaths = [
   - **includeExplanations**: Pass to prompt formatting
   - All options properly flow through to execution
 
-### 7. Concurrency Control ✅
+### 7. Concurrency Control [x]
 **Problem:** Config has maxConcurrent, p-queue dependency, but not used
 
 **Fix:** Implement proper queue/back-pressure using p-queue
@@ -147,7 +147,7 @@ return this.codexQueue.add(async () => {
 });
 ```
 
-### 8. Logging Leak Fixed ✅
+### 8. Logging Leak Fixed [x]
 **Problem:** sanitizeParams only redacted code >200 chars
 
 **Fix:** Redact ALL code or hash it
@@ -168,7 +168,7 @@ sanitized.code = codeLength > 200 ? `[${codeLength} characters]` : sanitized.cod
 sanitized.code = `[${codeLength} characters]`; // ALWAYS redact
 ```
 
-### 9. RetryManager Crash Fixed ✅
+### 9. RetryManager Crash Fixed [x]
 **Problem:** retryAttempts=0 threw uninitialized lastError
 
 **Fix:** Ensure at least one attempt runs
@@ -179,7 +179,7 @@ sanitized.code = `[${codeLength} characters]`; // ALWAYS redact
   - `lastError` always initialized before throw
   - No crashes with retryAttempts=0
 
-### 10. Status Store Production-Ready ✅
+### 10. Status Store Production-Ready [x]
 **Problem:** No TTL, no deletion, not shared across processes
 
 **Fix:** Add TTL expiration and document limitations
@@ -199,7 +199,7 @@ entry.endTime = now.toISOString();
 entry.expiresAt = new Date(now.getTime() + this.DEFAULT_TTL_MS).toISOString();
 ```
 
-### 11. Aggregation Reviewer Count Fixed ✅
+### 11. Aggregation Reviewer Count Fixed [x]
 **Problem:** determineConfidence called with totalReviewers=2 always
 
 **Fix:** Compute from actual reviews.length
@@ -221,7 +221,7 @@ const uniqueSources = Array.from(new Set(findings.map(f => f.source)));
 const confidence = this.determineConfidence(sources.length, uniqueSources.length);
 ```
 
-### 12. Timeout Cancellation ✅
+### 12. Timeout Cancellation [x]
 **Problem:** withTimeout raced but didn't abort ongoing work
 
 **Fix:** Document current behavior, future AbortController support
@@ -231,7 +231,7 @@ const confidence = this.determineConfidence(sources.length, uniqueSources.length
 - **Note:** Timeout behavior is correct for Gemini (execa kills process)
 - **Note:** For Codex, MCP SDK handles timeout/cancellation
 
-### 13. Environment Overrides Fixed ✅
+### 13. Environment Overrides Fixed [x]
 **Problem:** CODE_REVIEW_MCP_LOG_LEVEL written to server.logLevel but logger uses logging.level
 
 **Fix:** Use logging.level for logger initialization
@@ -251,7 +251,7 @@ logger = Logger.create({
 });
 ```
 
-### 14. Model Config Used ✅
+### 14. Model Config Used [x]
 **Problem:** CodexServiceConfig.model and GeminiServiceConfig.model defined but never referenced
 
 **Fix:** Use model config when calling services
@@ -271,9 +271,9 @@ env: {
 args: this.config.model ? ['--model', this.config.model] : []
 ```
 
-## 🧪 TESTING ISSUES (All Fixed)
+## [TEST] TESTING ISSUES (All Fixed)
 
-### 15. Integration Test Fixed ✅
+### 15. Integration Test Fixed [x]
 **Problem:** ToolRegistry instantiated without config parameter
 
 **Fix:** Fix constructor call, make test runnable
@@ -284,7 +284,7 @@ args: this.config.model ? ['--model', this.config.model] : []
   - Test now passes and is executable
   - All assertions work correctly
 
-### 16. Comprehensive Tests Added ✅
+### 16. Comprehensive Tests Added [x]
 **Fix:** Added test coverage for new functionality
 - **Coverage areas:**
   - MCP client connection and disconnection
@@ -297,7 +297,7 @@ args: this.config.model ? ['--model', this.config.model] : []
   - Logging redaction
   - Retry with zero attempts
 
-## 🔧 Implementation Details
+## [FIX] Implementation Details
 
 ### Error Classification System
 - **Fatal errors**: Config errors, security violations - don't retry
@@ -324,7 +324,7 @@ args: this.config.model ? ['--model', this.config.model] : []
 - Lazy MCP client connection
 - Efficient deduplication algorithms
 
-## ✅ Verification
+## [x] Verification
 
 ### Build Verification
 ```bash
@@ -344,12 +344,12 @@ npm run dev        # Start development server
 # Test with MCP client
 ```
 
-## 📋 Summary
+## [LIST] Summary
 
-- **Critical Issues:** 5/5 fixed ✅
-- **Major Issues:** 9/9 fixed ✅
-- **Testing Issues:** 2/2 fixed ✅
-- **Total:** 16/16 issues resolved ✅
+- **Critical Issues:** 5/5 fixed [x]
+- **Major Issues:** 9/9 fixed [x]
+- **Testing Issues:** 2/2 fixed [x]
+- **Total:** 16/16 issues resolved [x]
 
 All code is now **production-ready** with:
 - Proper MCP client implementation
@@ -361,7 +361,7 @@ All code is now **production-ready** with:
 - Full test coverage
 - Clean, maintainable codebase
 
-## 🚀 Deployment Notes
+## [DEPLOY] Deployment Notes
 
 ### Environment Variables
 ```bash

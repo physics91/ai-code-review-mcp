@@ -36,7 +36,7 @@ describe('MCP Server Integration', () => {
     mockConfig = {
       server: {
         name: 'test-server',
-        version: '1.0.0',
+        version: '1.0.1',
         logLevel: 'info',
         transport: 'stdio',
       },
@@ -100,7 +100,7 @@ describe('MCP Server Integration', () => {
     server = new Server(
       {
         name: 'test-server',
-        version: '1.0.0',
+        version: '1.0.1',
       },
       {
         capabilities: {

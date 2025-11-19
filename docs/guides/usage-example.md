@@ -417,11 +417,11 @@ chmod +x /path/to/cli
 
 The CLI auto-detection system provides:
 
-✅ **Zero Configuration**: Works out of the box
-✅ **Cross-Platform**: Windows, macOS, Linux
-✅ **Flexible**: Multiple configuration options
-✅ **Debuggable**: Clear logging and error messages
-✅ **Secure**: Path validation and whitelisting
-✅ **Reliable**: Falls back gracefully when CLIs not found
+[x] **Zero Configuration**: Works out of the box
+[x] **Cross-Platform**: Windows, macOS, Linux
+[x] **Flexible**: Multiple configuration options
+[x] **Debuggable**: Clear logging and error messages
+[x] **Secure**: Path validation and whitelisting
+[x] **Reliable**: Falls back gracefully when CLIs not found
 
 For most users, simply setting `"cliPath": "auto"` is sufficient!

@@ -1,7 +1,7 @@
 # CLI Path Auto-Detection Implementation
 
 **Date**: 2025-11-17
-**Status**: ✅ Complete
+**Status**: [x] Complete
 **Tests**: 60/60 Passing
 
 ## Overview
@@ -112,7 +112,7 @@ Created 26 comprehensive tests covering:
 - Error handling
 - Platform-specific scenarios (macOS Homebrew, Windows NPM, etc.)
 
-**Test Results**: ✅ All 26 tests passing
+**Test Results**: [x] All 26 tests passing
 
 ### 6. Documentation (`README.md`)
 
@@ -225,8 +225,8 @@ Unsafe paths (e.g., `/tmp/`, `../../../`) are rejected and trigger fallback to a
 
 ### Test Coverage
 
-- **26 CLI detector tests**: All passing ✅
-- **60 total tests**: All passing ✅
+- **26 CLI detector tests**: All passing [x]
+- **60 total tests**: All passing [x]
 - Coverage includes:
   - Detection logic
   - Priority order
@@ -261,22 +261,22 @@ npm test tests/unit/core/cli-detector.test.ts
 
 ## Benefits
 
-✅ **Zero Configuration**: Works out of the box on all platforms
-✅ **Cross-Platform**: Consistent behavior on Windows, macOS, Linux
-✅ **Secure**: Validates paths and prevents malicious configurations
-✅ **Flexible**: Multiple configuration options for different use cases
-✅ **Debuggable**: Detailed logging of detection process
-✅ **Tested**: Comprehensive test coverage (26 tests)
-✅ **Documented**: Clear documentation and examples
+[x] **Zero Configuration**: Works out of the box on all platforms
+[x] **Cross-Platform**: Consistent behavior on Windows, macOS, Linux
+[x] **Secure**: Validates paths and prevents malicious configurations
+[x] **Flexible**: Multiple configuration options for different use cases
+[x] **Debuggable**: Detailed logging of detection process
+[x] **Tested**: Comprehensive test coverage (26 tests)
+[x] **Documented**: Clear documentation and examples
 
 ## Files Modified
 
-1. ✅ `src/core/cli-detector.ts` (new file, 474 lines)
-2. ✅ `src/services/codex/client.ts` (enhanced)
-3. ✅ `src/services/gemini/client.ts` (enhanced)
-4. ✅ `config/default.json` (updated)
-5. ✅ `tests/unit/core/cli-detector.test.ts` (new file, 542 lines)
-6. ✅ `README.md` (enhanced with new section)
+1. [x] `src/core/cli-detector.ts` (new file, 474 lines)
+2. [x] `src/services/codex/client.ts` (enhanced)
+3. [x] `src/services/gemini/client.ts` (enhanced)
+4. [x] `config/default.json` (updated)
+5. [x] `tests/unit/core/cli-detector.test.ts` (new file, 542 lines)
+6. [x] `README.md` (enhanced with new section)
 
 ## Technical Details
 
@@ -351,11 +351,11 @@ Potential improvements for future versions:
 
 The CLI path auto-detection implementation is **complete and production-ready**. It provides:
 
-- ✅ Seamless cross-platform support
-- ✅ Zero-configuration for most users
-- ✅ Flexible configuration for advanced users
-- ✅ Robust security validation
-- ✅ Comprehensive test coverage
-- ✅ Clear documentation
+- [x] Seamless cross-platform support
+- [x] Zero-configuration for most users
+- [x] Flexible configuration for advanced users
+- [x] Robust security validation
+- [x] Comprehensive test coverage
+- [x] Clear documentation
 
 All 60 tests passing, including 26 new tests for CLI detection logic.

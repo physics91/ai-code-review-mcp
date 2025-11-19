@@ -1333,7 +1333,7 @@ function zodToJsonSchema(schema: z.ZodType): any {
 
 ## Document Metadata
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Last Updated:** 2025-01-17
 **Status:** Specification
-**Companion Document:** ARCHITECTURE.md
+**Companion Document:** ../reference/architecture.md

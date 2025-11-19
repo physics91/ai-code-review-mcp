@@ -1,8 +1,25 @@
 # Code Review MCP Server - Implementation Guide
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Implementation Phases](#implementation-phases)
+  - [Phase 1: Core MVP (Week 1-2)](#phase-1-core-mvp-week-1-2)
+  - [Phase 2: Gemini Integration (Week 3)](#phase-2-gemini-integration-week-3)
+  - [Phase 3: Review Aggregation (Week 4)](#phase-3-review-aggregation-week-4)
+  - [Phase 4: Production Hardening (Week 5-6)](#phase-4-production-hardening-week-5-6)
+  - [Phase 5: Documentation and Deployment (Week 7)](#phase-5-documentation-and-deployment-week-7)
+- [Best Practices](#best-practices)
+- [Deployment Checklist](#deployment-checklist)
+- [Monitoring in Production](#monitoring-in-production)
+- [Troubleshooting Common Issues](#troubleshooting-common-issues)
+- [Appendix: File Structure Summary](#appendix-file-structure-summary)
+
+---
+
 ## Overview
 
-This document provides a step-by-step guide to implementing the Code Review MCP Server based on the architecture and specifications provided in ARCHITECTURE.md and SPECIFICATIONS.md.
+This document provides a step-by-step guide to implementing the Code Review MCP Server based on the architecture and specifications provided in [architecture.md](../reference/architecture.md) and [SPECIFICATIONS.md](../reference/SPECIFICATIONS.md).
 
 ## Implementation Phases
 
@@ -65,7 +82,7 @@ import { z } from 'zod';
 export const CodeReviewParamsSchema = z.object({
   code: z.string().min(1).max(50000),
   language: z.string().optional(),
-  // ... (see SPECIFICATIONS.md)
+  // ... (see ../reference/SPECIFICATIONS.md)
 });
 
 // Step 2: Implement Codex client
@@ -774,71 +791,71 @@ echo "test prompt" | /path/to/gemini
 
 ```
 code-review-mcp/
-├── src/
-│   ├── index.ts                          # Entry point
-│   ├── server.ts                         # MCP server setup
-│   ├── tools/
-│   │   ├── registry.ts                   # Tool registration
-│   │   ├── codex-review.ts               # Codex tool
-│   │   ├── gemini-review.ts              # Gemini tool
-│   │   └── combined-review.ts            # Combined tool
-│   ├── services/
-│   │   ├── codex/
-│   │   │   ├── client.ts                 # Codex service
-│   │   │   ├── parser.ts                 # Response parser
-│   │   │   └── types.ts                  # Types
-│   │   ├── gemini/
-│   │   │   ├── client.ts                 # Gemini service
-│   │   │   ├── executor.ts               # CLI executor
-│   │   │   └── types.ts                  # Types
-│   │   └── aggregator/
-│   │       ├── merger.ts                 # Review merger
-│   │       ├── formatter.ts              # Formatters
-│   │       └── types.ts                  # Types
-│   ├── core/
-│   │   ├── config.ts                     # Configuration
-│   │   ├── logger.ts                     # Logging
-│   │   ├── error-handler.ts              # Errors
-│   │   ├── retry.ts                      # Retry logic
-│   │   ├── cache.ts                      # Caching
-│   │   └── rate-limiter.ts               # Rate limiting
-│   ├── schemas/
-│   │   ├── tools.ts                      # Tool schemas
-│   │   ├── config.ts                     # Config schemas
-│   │   └── responses.ts                  # Response schemas
-│   └── types/
-│       ├── common.ts                     # Common types
-│       └── index.ts                      # Type exports
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   ├── e2e/
-│   └── performance/
-├── config/
-│   ├── default.json
-│   └── schema.json
-├── docs/
-│   ├── API.md
-│   ├── CONFIGURATION.md
-│   └── TROUBLESHOOTING.md
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── package.json
-├── tsconfig.json
-├── tsup.config.ts
-├── .env.example
-├── .eslintrc.json
-├── .prettierrc.json
-├── Dockerfile
-├── README.md
-├── ARCHITECTURE.md
-├── SPECIFICATIONS.md
-└── IMPLEMENTATION_GUIDE.md (this file)
++-- src/
+|   +-- index.ts                          # Entry point
+|   +-- server.ts                         # MCP server setup
+|   +-- tools/
+|   |   +-- registry.ts                   # Tool registration
+|   |   +-- codex-review.ts               # Codex tool
+|   |   +-- gemini-review.ts              # Gemini tool
+|   |   +-- combined-review.ts            # Combined tool
+|   +-- services/
+|   |   +-- codex/
+|   |   |   +-- client.ts                 # Codex service
+|   |   |   +-- parser.ts                 # Response parser
+|   |   |   +-- types.ts                  # Types
+|   |   +-- gemini/
+|   |   |   +-- client.ts                 # Gemini service
+|   |   |   +-- executor.ts               # CLI executor
+|   |   |   +-- types.ts                  # Types
+|   |   +-- aggregator/
+|   |       +-- merger.ts                 # Review merger
+|   |       +-- formatter.ts              # Formatters
+|   |       +-- types.ts                  # Types
+|   +-- core/
+|   |   +-- config.ts                     # Configuration
+|   |   +-- logger.ts                     # Logging
+|   |   +-- error-handler.ts              # Errors
+|   |   +-- retry.ts                      # Retry logic
+|   |   +-- cache.ts                      # Caching
+|   |   +-- rate-limiter.ts               # Rate limiting
+|   +-- schemas/
+|   |   +-- tools.ts                      # Tool schemas
+|   |   +-- config.ts                     # Config schemas
+|   |   +-- responses.ts                  # Response schemas
+|   +-- types/
+|       +-- common.ts                     # Common types
+|       +-- index.ts                      # Type exports
++-- tests/
+|   +-- unit/
+|   +-- integration/
+|   +-- e2e/
+|   +-- performance/
++-- config/
+|   +-- default.json
+|   +-- schema.json
++-- docs/
+|   +-- API.md
+|   +-- CONFIGURATION.md
+|   +-- TROUBLESHOOTING.md
++-- .github/
+|   +-- workflows/
+|       +-- ci.yml
++-- package.json
++-- tsconfig.json
++-- tsup.config.ts
++-- .env.example
++-- .eslintrc.json
++-- .prettierrc.json
++-- Dockerfile
++-- README.md
++-- ../reference/architecture.md
++-- ../reference/SPECIFICATIONS.md
++-- ../guides/implementation-guide.md (this file)
 ```
 
 ---
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Last Updated:** 2025-01-17
 **Author:** Technical Architecture Team

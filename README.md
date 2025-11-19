@@ -23,25 +23,25 @@ A comprehensive Model Context Protocol (MCP) server that provides AI-powered cod
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      MCP Client (Claude)                         │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ MCP Protocol (stdio)
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 Code Review MCP Server                           │
-│  ┌──────────────────┐         ┌──────────────────┐             │
-│  │  Codex Service   │         │  Gemini Service  │             │
-│  │  (CLI Direct)    │         │  (CLI Direct)    │             │
-│  └────────┬─────────┘         └────────┬─────────┘             │
-│           │                             │                        │
-│           └──────────┬──────────────────┘                        │
-│                      ▼                                           │
-│           ┌────────────────────┐                                │
-│           │ Review Aggregator  │                                │
-│           │ & Deduplication    │                                │
-│           └────────────────────┘                                │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                      MCP Client (Claude)                       |
++---------------------------+-----------------------------------+
+                            | MCP Protocol (stdio)
+                            v
++---------------------------------------------------------------+
+|                 Code Review MCP Server                         |
+|  +------------------+         +------------------+            |
+|  |  Codex Service   |         |  Gemini Service  |            |
+|  |  (CLI Direct)    |         |  (CLI Direct)    |            |
+|  +--------+---------+         +--------+---------+            |
+|           |                            |                       |
+|           +------------+---------------+                       |
+|                        v                                       |
+|           +--------------------+                               |
+|           | Review Aggregator  |                               |
+|           | & Deduplication    |                               |
+|           +--------------------+                               |
++---------------------------------------------------------------+
 ```
 
 ## Installation
@@ -233,7 +233,7 @@ Create a `config.json` in your project or use the default configuration:
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "logLevel": "info"
   },
   "codex": {
@@ -526,7 +526,7 @@ For faster combined reviews:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `server.name` | string | "code-review-mcp" | Server name |
-| `server.version` | string | "1.0.0" | Server version |
+| `server.version` | string | "1.0.1" | Server version |
 | `server.logLevel` | string | "info" | Log level (debug/info/warn/error) |
 
 ### Codex Configuration
@@ -692,6 +692,23 @@ npm run lint:fix
 2. Reduce `maxConcurrent` setting
 3. Review logs for memory leaks
 
+## Documentation
+
+For detailed documentation, please refer to:
+
+### Core Documentation
+- **[Implementation Guide](docs/guides/implementation-guide.md)** - Step-by-step implementation guide
+- **[Usage Examples](docs/guides/usage-example.md)** - Real-world usage examples
+- **[Project Summary](docs/guides/project-summary.md)** - Project overview and objectives
+
+### Reference
+- **[Architecture](docs/reference/architecture.md)** - System architecture and design
+- **[Specifications](docs/reference/SPECIFICATIONS.md)** - Technical specifications
+
+### Development History
+- **[Migration Documentation](docs/history/migration/)** - CLI migration guides
+- **[Development Notes](docs/history/development/)** - Implementation status and fixes
+
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines and code of conduct.
@@ -736,6 +753,6 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2025-01-17
+**Version**: 1.0.1
+**Last Updated**: 2025-01-19
 **Status**: Production Ready

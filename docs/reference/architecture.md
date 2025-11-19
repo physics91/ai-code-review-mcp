@@ -1,88 +1,148 @@
 # Code Review MCP Server - System Architecture
 
+## Table of Contents
+
+1. [Architecture Overview](#1-architecture-overview)
+   - 1.1 [System Context Diagram](#11-system-context-diagram)
+   - 1.2 [High-Level Component Architecture](#12-high-level-component-architecture)
+2. [Component Design](#2-component-design)
+   - 2.1 [MCP Server Core](#21-mcp-server-core-serverts)
+   - 2.2 [Tool Registry](#22-tool-registry-toolsregistryts)
+   - 2.3 [Codex Service](#23-codex-service-servicescodex)
+   - 2.4 [Gemini Service](#24-gemini-service-servicesgemini)
+   - 2.5 [Review Aggregator](#25-review-aggregator-servicesaggregator)
+   - 2.6 [Configuration Manager](#26-configuration-manager-coreconfigts)
+   - 2.7 [Error Handler](#27-error-handler-coreerror-handlerts)
+   - 2.8 [Logger](#28-logger-coreloggerts)
+3. [API/Tool Specifications](#3-apitool-specifications)
+   - 3.1 [Tool: review_code_with_codex](#31-tool-review_code_with_codex)
+   - 3.2 [Tool: review_code_with_gemini](#32-tool-review_code_with_gemini)
+   - 3.3 [Tool: review_code_combined](#33-tool-review_code_combined)
+   - 3.4 [Tool: get_review_status](#34-tool-get_review_status)
+4. [Data Flow Descriptions](#4-data-flow-descriptions)
+   - 4.1 [Single Review Flow](#41-single-review-flow-codex-example)
+   - 4.2 [Combined Review Flow](#42-combined-review-flow)
+   - 4.3 [Error Handling Flow](#43-error-handling-flow)
+5. [Technology Stack Decisions](#5-technology-stack-decisions)
+   - 5.1 [Core Technologies](#51-core-technologies)
+   - 5.2 [Development Tools](#52-development-tools)
+   - 5.3 [Dependencies Analysis](#53-dependencies-analysis)
+6. [Security Considerations](#6-security-considerations)
+   - 6.1 [Input Validation](#61-input-validation)
+   - 6.2 [CLI Execution Security](#62-cli-execution-security)
+   - 6.3 [Configuration Security](#63-configuration-security)
+   - 6.4 [MCP Tool Security](#64-mcp-tool-security)
+   - 6.5 [Data Privacy](#65-data-privacy)
+   - 6.6 [Dependency Security](#66-dependency-security)
+7. [Configuration Structure](#7-configuration-structure)
+   - 7.1 [Configuration File](#71-configuration-file-configdefaultjson)
+   - 7.2 [Environment Variables](#72-environment-variables)
+   - 7.3 [Configuration Schema](#73-configuration-schema-zod)
+8. [Implementation Roadmap](#8-implementation-roadmap)
+9. [Performance Considerations](#9-performance-considerations)
+   - 9.1 [Performance Targets](#91-performance-targets)
+   - 9.2 [Optimization Strategies](#92-optimization-strategies)
+10. [Monitoring and Observability](#10-monitoring-and-observability)
+    - 10.1 [Metrics to Track](#101-metrics-to-track)
+    - 10.2 [Logging Strategy](#102-logging-strategy)
+11. [Testing Strategy](#11-testing-strategy)
+    - 11.1 [Test Pyramid](#111-test-pyramid)
+    - 11.2 [Test Coverage Targets](#112-test-coverage-targets)
+    - 11.3 [Test Scenarios](#113-test-scenarios)
+12. [Deployment and Operations](#12-deployment-and-operations)
+    - 12.1 [Installation Methods](#121-installation-methods)
+    - 12.2 [MCP Configuration](#122-mcp-configuration)
+    - 12.3 [Health Checks](#123-health-checks)
+    - 12.4 [Troubleshooting Guide](#124-troubleshooting-guide)
+13. [Future Enhancements](#13-future-enhancements)
+    - 13.1 [Planned Features](#131-planned-features)
+    - 13.2 [Scalability Considerations](#132-scalability-considerations)
+
+---
+
 ## 1. Architecture Overview
 
 ### 1.1 System Context Diagram
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         MCP Client                                │
-│                    (Claude Desktop/CLI)                           │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │ MCP Protocol (stdio)
-                         ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                  Code Review MCP Server                           │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │              Tool Registry & Router                        │  │
-│  └─────────┬──────────────────────────────┬──────────────────┘  │
-│            │                               │                      │
-│  ┌─────────▼─────────┐         ┌──────────▼──────────┐          │
-│  │  Codex Service    │         │  Gemini Service     │          │
-│  │  - MCP Integration│         │  - CLI Integration  │          │
-│  │  - Response Parse │         │  - Process Mgmt     │          │
-│  └─────────┬─────────┘         └──────────┬──────────┘          │
-│            │                               │                      │
-│  ┌─────────▼────────────────────────────────▼──────────┐         │
-│  │         Review Aggregation & Formatting              │         │
-│  └─────────┬────────────────────────────────────────────┘         │
-│            │                                                       │
-│  ┌─────────▼─────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Config Manager    │  │ Error Handler│  │ Logger       │      │
-│  └───────────────────┘  └──────────────┘  └──────────────┘      │
-└────────────────────────────────────────────────────────────────────┘
-                         │                   │
-            ┌────────────▼─────┐  ┌─────────▼──────────┐
-            │  Codex MCP Tool  │  │  Gemini CLI        │
-            │  (Internal)      │  │  (External Process)│
-            └──────────────────┘  └────────────────────┘
++------------------------------------------------------------------+
+|                         MCP Client                                |
+|                    (Claude Desktop/CLI)                           |
++------------------------+-----------------------------------------+
+                         | MCP Protocol (stdio)
+                         v
++------------------------------------------------------------------+
+|                  Code Review MCP Server                           |
+|  +------------------------------------------------------------+  |
+|  |              Tool Registry & Router                        |  |
+|  +---------+------------------------------+------------------+  |
+|            |                               |                      |
+|  +---------v---------+         +----------v----------+          |
+|  |  Codex Service    |         |  Gemini Service     |          |
+|  |  - MCP Integration|         |  - CLI Integration  |          |
+|  |  - Response Parse |         |  - Process Mgmt     |          |
+|  +---------+---------+         +----------+----------+          |
+|            |                               |                      |
+|  +---------v--------------------------------v----------+         |
+|  |         Review Aggregation & Formatting              |         |
+|  +---------+--------------------------------------------+         |
+|            |                                                       |
+|  +---------v---------+  +--------------+  +--------------+      |
+|  | Config Manager    |  | Error Handler|  | Logger       |      |
+|  +-------------------+  +--------------+  +--------------+      |
++--------------------------------------------------------------------+
+                         |                   |
+            +------------v-----+  +---------v----------+
+            |  Codex MCP Tool  |  |  Gemini CLI        |
+            |  (Internal)      |  |  (External Process)|
+            +------------------+  +--------------------+
 ```
 
 ### 1.2 High-Level Component Architecture
 ```
 code-review-mcp/
-├── src/
-│   ├── index.ts                    # MCP Server entry point
-│   ├── server.ts                   # MCP Server configuration
-│   ├── tools/
-│   │   ├── registry.ts             # Tool registration
-│   │   ├── codex-review.ts         # Codex review tool
-│   │   ├── gemini-review.ts        # Gemini review tool
-│   │   └── combined-review.ts      # Dual review tool
-│   ├── services/
-│   │   ├── codex/
-│   │   │   ├── client.ts           # Codex MCP client wrapper
-│   │   │   ├── parser.ts           # Response parser
-│   │   │   └── types.ts            # Type definitions
-│   │   ├── gemini/
-│   │   │   ├── client.ts           # Gemini CLI wrapper
-│   │   │   ├── executor.ts         # Process executor
-│   │   │   └── types.ts            # Type definitions
-│   │   └── aggregator/
-│   │       ├── formatter.ts        # Response formatting
-│   │       ├── merger.ts           # Review merging logic
-│   │       └── types.ts            # Type definitions
-│   ├── core/
-│   │   ├── config.ts               # Configuration management
-│   │   ├── logger.ts               # Logging system
-│   │   ├── error-handler.ts        # Error handling
-│   │   └── retry.ts                # Retry logic
-│   ├── schemas/
-│   │   ├── tools.ts                # Zod tool schemas
-│   │   ├── config.ts               # Zod config schemas
-│   │   └── responses.ts            # Zod response schemas
-│   └── types/
-│       ├── common.ts               # Common types
-│       └── index.ts                # Type exports
-├── config/
-│   ├── default.json                # Default configuration
-│   └── schema.json                 # Config validation schema
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-├── package.json
-├── tsconfig.json
-└── README.md
++-- src/
+|   +-- index.ts                    # MCP Server entry point
+|   +-- server.ts                   # MCP Server configuration
+|   +-- tools/
+|   |   +-- registry.ts             # Tool registration
+|   |   +-- codex-review.ts         # Codex review tool
+|   |   +-- gemini-review.ts        # Gemini review tool
+|   |   +-- combined-review.ts      # Dual review tool
+|   +-- services/
+|   |   +-- codex/
+|   |   |   +-- client.ts           # Codex MCP client wrapper
+|   |   |   +-- parser.ts           # Response parser
+|   |   |   +-- types.ts            # Type definitions
+|   |   +-- gemini/
+|   |   |   +-- client.ts           # Gemini CLI wrapper
+|   |   |   +-- executor.ts         # Process executor
+|   |   |   +-- types.ts            # Type definitions
+|   |   +-- aggregator/
+|   |       +-- formatter.ts        # Response formatting
+|   |       +-- merger.ts           # Review merging logic
+|   |       +-- types.ts            # Type definitions
+|   +-- core/
+|   |   +-- config.ts               # Configuration management
+|   |   +-- logger.ts               # Logging system
+|   |   +-- error-handler.ts        # Error handling
+|   |   +-- retry.ts                # Retry logic
+|   +-- schemas/
+|   |   +-- tools.ts                # Zod tool schemas
+|   |   +-- config.ts               # Zod config schemas
+|   |   +-- responses.ts            # Zod response schemas
+|   +-- types/
+|       +-- common.ts               # Common types
+|       +-- index.ts                # Type exports
++-- config/
+|   +-- default.json                # Default configuration
+|   +-- schema.json                 # Config validation schema
++-- tests/
+|   +-- unit/
+|   +-- integration/
+|   +-- e2e/
++-- package.json
++-- tsconfig.json
++-- README.md
 ```
 
 ## 2. Component Design
@@ -449,28 +509,28 @@ type ReviewStatusOutput = z.infer<typeof ReviewStatusOutputSchema>;
 ### 4.1 Single Review Flow (Codex Example)
 
 ```
-┌─────────┐     ┌──────────┐     ┌───────────┐     ┌──────────┐     ┌────────┐
-│ Client  │────▶│ MCP      │────▶│ Tool      │────▶│ Codex    │────▶│ MCP    │
-│         │     │ Server   │     │ Registry  │     │ Service  │     │ Tool   │
-└─────────┘     └──────────┘     └───────────┘     └──────────┘     └────────┘
-    │                                                     │
-    │                                                     ▼
-    │                                              ┌──────────┐
-    │                                              │ Format   │
-    │                                              │ Prompt   │
-    │                                              └──────────┘
-    │                                                     │
-    │                                                     ▼
-    │                                              ┌──────────┐
-    │                                              │ Parse    │
-    │                                              │ Response │
-    │                                              └──────────┘
-    │                                                     │
-    ▼                                                     ▼
-┌─────────┐     ┌──────────┐     ┌───────────┐     ┌──────────┐
-│ Review  │◀────│ Format   │◀────│ Aggregate │◀────│ Review   │
-│ Result  │     │ Output   │     │ Service   │     │ Result   │
-└─────────┘     └──────────┘     └───────────┘     └──────────┘
++---------+     +----------+     +-----------+     +----------+     +--------+
+| Client  |---->| MCP      |---->| Tool      |---->| Codex    |---->| MCP    |
+|         |     | Server   |     | Registry  |     | Service  |     | Tool   |
++---------+     +----------+     +-----------+     +----------+     +--------+
+    |                                                     |
+    |                                                     v
+    |                                              +----------+
+    |                                              | Format   |
+    |                                              | Prompt   |
+    |                                              +----------+
+    |                                                     |
+    |                                                     v
+    |                                              +----------+
+    |                                              | Parse    |
+    |                                              | Response |
+    |                                              +----------+
+    |                                                     |
+    v                                                     v
++---------+     +----------+     +-----------+     +----------+
+| Review  |<----| Format   |<----| Aggregate |<----| Review   |
+| Result  |     | Output   |     | Service   |     | Result   |
++---------+     +----------+     +-----------+     +----------+
 ```
 
 **Step-by-Step:**
@@ -487,44 +547,44 @@ type ReviewStatusOutput = z.infer<typeof ReviewStatusOutputSchema>;
 ### 4.2 Combined Review Flow
 
 ```
-┌─────────┐     ┌──────────┐     ┌───────────┐
-│ Client  │────▶│ MCP      │────▶│ Combined  │
-│         │     │ Server   │     │ Review    │
-└─────────┘     └──────────┘     │ Tool      │
-    │                             └─────┬─────┘
-    │                                   │
-    │                          ┌────────┴────────┐
-    │                          │                 │
-    │                          ▼                 ▼
-    │                    ┌──────────┐      ┌──────────┐
-    │                    │ Codex    │      │ Gemini   │
-    │                    │ Service  │      │ Service  │
-    │                    └─────┬────┘      └────┬─────┘
-    │                          │                │
-    │                          │  (Parallel)    │
-    │                          │                │
-    │                          ▼                ▼
-    │                    ┌──────────┐      ┌──────────┐
-    │                    │ Codex    │      │ Gemini   │
-    │                    │ Review   │      │ Review   │
-    │                    └─────┬────┘      └────┬─────┘
-    │                          │                │
-    │                          └────────┬───────┘
-    │                                   │
-    │                                   ▼
-    │                          ┌─────────────────┐
-    │                          │ Review          │
-    │                          │ Aggregator      │
-    │                          │ - Merge         │
-    │                          │ - Deduplicate   │
-    │                          │ - Prioritize    │
-    │                          └────────┬────────┘
-    │                                   │
-    ▼                                   ▼
-┌─────────┐     ┌──────────┐     ┌──────────┐
-│ Combined│◀────│ Format   │◀────│ Aggregated│
-│ Result  │     │ Output   │     │ Review    │
-└─────────┘     └──────────┘     └──────────┘
++---------+     +----------+     +-----------+
+| Client  |---->| MCP      |---->| Combined  |
+|         |     | Server   |     | Review    |
++---------+     +----------+     | Tool      |
+    |                             +-----+-----+
+    |                                   |
+    |                          +--------+--------+
+    |                          |                 |
+    |                          v                 v
+    |                    +----------+      +----------+
+    |                    | Codex    |      | Gemini   |
+    |                    | Service  |      | Service  |
+    |                    +-----+----+      +----+-----+
+    |                          |                |
+    |                          |  (Parallel)    |
+    |                          |                |
+    |                          v                v
+    |                    +----------+      +----------+
+    |                    | Codex    |      | Gemini   |
+    |                    | Review   |      | Review   |
+    |                    +-----+----+      +----+-----+
+    |                          |                |
+    |                          +--------+-------+
+    |                                   |
+    |                                   v
+    |                          +-----------------+
+    |                          | Review          |
+    |                          | Aggregator      |
+    |                          | - Merge         |
+    |                          | - Deduplicate   |
+    |                          | - Prioritize    |
+    |                          +--------+--------+
+    |                                   |
+    v                                   v
++---------+     +----------+     +----------+
+| Combined|<----| Format   |<----| Aggregated|
+| Result  |     | Output   |     | Review    |
++---------+     +----------+     +----------+
 ```
 
 **Step-by-Step:**
@@ -544,40 +604,40 @@ type ReviewStatusOutput = z.infer<typeof ReviewStatusOutputSchema>;
 ### 4.3 Error Handling Flow
 
 ```
-┌──────────┐
-│ Tool     │
-│ Execution│
-└────┬─────┘
-     │
-     ▼
-┌──────────┐     Yes    ┌──────────┐
-│ Error?   │───────────▶│ Classify │
-└────┬─────┘            │ Error    │
-     │ No               └────┬─────┘
-     │                       │
-     ▼                       ▼
-┌──────────┐          ┌──────────┐     Yes    ┌──────────┐
-│ Return   │          │Retryable?│───────────▶│ Retry    │
-│ Success  │          └────┬─────┘            │ Logic    │
-└──────────┘               │ No               └────┬─────┘
-                           │                       │
-                           ▼                       │
-                      ┌──────────┐                 │
-                      │ Log Error│◀────────────────┘
-                      └────┬─────┘
-                           │
-                           ▼
-                      ┌──────────┐
-                      │ Format   │
-                      │ Error    │
-                      │ Response │
-                      └────┬─────┘
-                           │
-                           ▼
-                      ┌──────────┐
-                      │ Return   │
-                      │ to Client│
-                      └──────────┘
++----------+
+| Tool     |
+| Execution|
++----+-----+
+     |
+     v
++----------+     Yes    +----------+
+| Error?   |----------->| Classify |
++----+-----+            | Error    |
+     | No               +----+-----+
+     |                       |
+     v                       v
++----------+          +----------+     Yes    +----------+
+| Return   |          |Retryable?|----------->| Retry    |
+| Success  |          +----+-----+            | Logic    |
++----------+               | No               +----+-----+
+                           |                       |
+                           v                       |
+                      +----------+                 |
+                      | Log Error|<----------------+
+                      +----+-----+
+                           |
+                           v
+                      +----------+
+                      | Format   |
+                      | Error    |
+                      | Response |
+                      +----+-----+
+                           |
+                           v
+                      +----------+
+                      | Return   |
+                      | to Client|
+                      +----------+
 ```
 
 ## 5. Technology Stack Decisions
@@ -610,7 +670,7 @@ type ReviewStatusOutput = z.infer<typeof ReviewStatusOutputSchema>;
 **Production Dependencies:**
 ```json
 {
-  "@modelcontextprotocol/sdk": "^1.0.0",
+  "@modelcontextprotocol/sdk": "^1.0.4",
   "zod": "^3.22.4",
   "pino": "^8.17.2",
   "pino-pretty": "^10.3.1",
@@ -751,7 +811,7 @@ const sanitizeConfig = (config: any): any => {
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "logLevel": "info",
     "transport": "stdio"
   },
@@ -1090,15 +1150,15 @@ export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 ### 11.1 Test Pyramid
 
 ```
-        ┌─────────────┐
-        │   E2E (5%)  │
-        └─────────────┘
-      ┌─────────────────┐
-      │ Integration(15%)│
-      └─────────────────┘
-    ┌─────────────────────┐
-    │   Unit Tests (80%)  │
-    └─────────────────────┘
+        +-------------+
+        |   E2E (5%)  |
+        +-------------+
+      +-----------------+
+      | Integration(15%)|
+      +-----------------+
+    +---------------------+
+    |   Unit Tests (80%)  |
+    +---------------------+
 ```
 
 ### 11.2 Test Coverage Targets
@@ -1185,7 +1245,7 @@ Response:
     "gemini": "available"
   },
   "uptime": 3600,
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
 ```
 
@@ -1249,7 +1309,7 @@ Response:
 
 ## Document Metadata
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Last Updated:** 2025-01-17
 **Status:** Specification
 **Authors:** Technical Architecture Team
