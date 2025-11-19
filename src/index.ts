@@ -42,7 +42,9 @@ async function main() {
       },
       {
         capabilities: {
-          tools: {},
+          tools: {
+            listChanged: true,
+          },
         },
       }
     );
