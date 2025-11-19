@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 import { ErrorHandler } from '../core/error-handler.js';
 import type { Logger } from '../core/logger.js';
+import { ValidationUtils } from '../core/validation.js';
 import type { ServerConfig } from '../schemas/config.js';
 import type { ReviewResult } from '../schemas/review.js';
 import {
@@ -26,9 +27,17 @@ import type { CodexReviewService } from '../services/codex/client.js';
 import type { GeminiReviewService } from '../services/gemini/client.js';
 import { ReviewStatusStore } from '../services/review-status/store.js';
 
-// Schema for get_review_status input
+// Schema for get_review_status input - Enhanced with detailed error messages
 const ReviewStatusInputSchema = z.object({
-  reviewId: z.string().min(1).describe('Review ID to check status for'),
+  reviewId: z
+    .string({
+      required_error: 'Review ID is required',
+      invalid_type_error: 'Review ID must be a string',
+    })
+    .min(1, {
+      message: 'Review ID cannot be empty. Expected format: codex-<timestamp>-<hash> or gemini-<timestamp>-<hash>',
+    })
+    .describe('Review ID to check status for'),
 });
 
 export interface ToolDependencies {
@@ -215,6 +224,7 @@ export class ToolRegistry {
    * CRITICAL FIX #4: Allow per-request maxCodeLength override
    * MAJOR FIX #6: Honor per-request timeout option
    * MAJOR FIX #7: Use queue for concurrency control
+   * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
   private async handleCodexReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }>}> {
     const { codexService, config, logger } = this.dependencies;
@@ -227,7 +237,18 @@ export class ToolRegistry {
     // The schema itself still uses config default, but we validate against it
     const maxCodeLength = (args as any).maxCodeLength ?? config.review.maxCodeLength;
     const schema = createCodeReviewParamsSchema(maxCodeLength);
-    const params = schema.parse(args);
+
+    // ENHANCEMENT: Validate with detailed error messages
+    const params = ValidationUtils.validateOrThrow(schema, args, 'review_code_with_codex');
+
+    // ENHANCEMENT: Sanitize and warn about modifications
+    const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
+    if (warnings.length > 0) {
+      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+    }
+
+    // Use sanitized params
+    const finalParams = sanitized;
 
     // Queue the review to control concurrency
     const result = await this.codexQueue.add(async () => {
@@ -237,7 +258,7 @@ export class ToolRegistry {
       this.reviewStatusStore.updateStatus(reviewId, 'in_progress');
 
       try {
-        const result = await codexService.reviewCode(params);
+        const result = await codexService.reviewCode(finalParams);
 
         // Override the generated reviewId with our tracked one
         result.reviewId = reviewId;
@@ -280,6 +301,7 @@ export class ToolRegistry {
    * CRITICAL FIX #4: Allow per-request maxCodeLength override
    * MAJOR FIX #6: Honor per-request timeout and cliPath options
    * MAJOR FIX #7: Use queue for concurrency control
+   * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
   private async handleGeminiReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { geminiService, config, logger } = this.dependencies;
@@ -291,7 +313,18 @@ export class ToolRegistry {
     // CRITICAL FIX #4: Allow per-request maxCodeLength override
     const maxCodeLength = (args as any).maxCodeLength ?? config.review.maxCodeLength;
     const schema = createCodeReviewParamsSchema(maxCodeLength);
-    const params = schema.parse(args);
+
+    // ENHANCEMENT: Validate with detailed error messages
+    const params = ValidationUtils.validateOrThrow(schema, args, 'review_code_with_gemini');
+
+    // ENHANCEMENT: Sanitize and warn about modifications
+    const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
+    if (warnings.length > 0) {
+      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+    }
+
+    // Use sanitized params
+    const finalParams = sanitized;
 
     // Queue the review to control concurrency
     const result = await this.geminiQueue.add(async () => {
@@ -301,7 +334,7 @@ export class ToolRegistry {
       this.reviewStatusStore.updateStatus(reviewId, 'in_progress');
 
       try {
-        const result = await geminiService.reviewCode(params);
+        const result = await geminiService.reviewCode(finalParams);
 
         // Override the generated reviewId with our tracked one
         result.reviewId = reviewId;
@@ -343,6 +376,7 @@ export class ToolRegistry {
    * CRITICAL FIX #3: Wire review status store operations
    * MAJOR FIX #6: Honor all per-request options
    * MAJOR FIX #7: Respect parallelExecution flag for concurrency
+   * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
   private async handleCombinedReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { codexService, geminiService, aggregator, logger } = this.dependencies;
@@ -351,11 +385,20 @@ export class ToolRegistry {
       throw new Error('Both Codex and Gemini services must be enabled for combined review');
     }
 
-    // Validate input
-    const params = CombinedReviewInputSchema.parse(args);
+    // ENHANCEMENT: Validate input with detailed error messages
+    const params = ValidationUtils.validateOrThrow(CombinedReviewInputSchema, args, 'review_code_combined');
 
-    const parallelExecution = params.options?.parallelExecution ?? true;
-    const includeIndividualReviews = params.options?.includeIndividualReviews ?? false;
+    // ENHANCEMENT: Sanitize and warn about modifications
+    const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
+    if (warnings.length > 0) {
+      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+    }
+
+    // Use sanitized params
+    const finalParams = sanitized;
+
+    const parallelExecution = finalParams.options?.parallelExecution ?? true;
+    const includeIndividualReviews = finalParams.options?.includeIndividualReviews ?? false;
 
     // CRITICAL FIX #3: Create combined review status entry
     const reviewId = `combined-${Date.now()}`;
@@ -371,12 +414,12 @@ export class ToolRegistry {
       // Execute reviews (parallel or sequential based on option)
       const reviews = parallelExecution
         ? await Promise.all([
-            this.codexQueue.add(() => codexService.reviewCode(params)),
-            this.geminiQueue.add(() => geminiService.reviewCode(params)),
+            this.codexQueue.add(() => codexService.reviewCode(finalParams)),
+            this.geminiQueue.add(() => geminiService.reviewCode(finalParams)),
           ])
         : [
-            await this.codexQueue.add(() => codexService.reviewCode(params)),
-            await this.geminiQueue.add(() => geminiService.reviewCode(params)),
+            await this.codexQueue.add(() => codexService.reviewCode(finalParams)),
+            await this.geminiQueue.add(() => geminiService.reviewCode(finalParams)),
           ];
 
       // Filter out undefined results (shouldn't happen, but for type safety)
@@ -420,10 +463,11 @@ export class ToolRegistry {
   /**
    * Handle get review status tool
    * CRITICAL FIX #3: Properly retrieve and return status
+   * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
   private async handleGetReviewStatus(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
-    // Validate input
-    const params = ReviewStatusInputSchema.parse(args);
+    // ENHANCEMENT: Validate input with detailed error messages
+    const params = ValidationUtils.validateOrThrow(ReviewStatusInputSchema, args, 'get_review_status');
 
     // Get status from store
     const status = this.reviewStatusStore.get(params.reviewId);
