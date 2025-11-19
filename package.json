@@ -1,6 +1,6 @@
 {
   "name": "code-review-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MCP server for AI-powered code review using Codex and Gemini",
   "type": "module",
   "main": "dist/index.js",
