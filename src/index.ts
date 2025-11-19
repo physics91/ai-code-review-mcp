@@ -5,7 +5,7 @@
  * Entry point for the MCP server
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { ConfigManager } from './core/config.js';
@@ -34,20 +34,11 @@ async function main() {
 
     logger.info({ version: config.server.version }, 'Starting Code Review MCP Server');
 
-    // Create MCP server
-    const server = new Server(
-      {
-        name: config.server.name,
-        version: config.server.version,
-      },
-      {
-        capabilities: {
-          tools: {
-            listChanged: true,
-          },
-        },
-      }
-    );
+    // Create MCP server using high-level API (automatically handles capabilities)
+    const server = new McpServer({
+      name: config.server.name,
+      version: config.server.version,
+    });
 
     // Initialize services
     const codexService = config.codex.enabled

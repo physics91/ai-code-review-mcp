@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { Logger } from '../../src/core/logger.js';
 import { CodexReviewService } from '../../src/services/codex/client.js';
@@ -17,7 +17,7 @@ import { execa } from 'execa';
 vi.mock('execa');
 
 describe('MCP Server Integration', () => {
-  let server: Server;
+  let server: McpServer;
   let registry: ToolRegistry;
   let mockLogger: Logger;
   let mockConfig: ServerConfig;
@@ -96,18 +96,11 @@ describe('MCP Server Integration', () => {
       },
     };
 
-    // Create MCP server
-    server = new Server(
-      {
-        name: 'test-server',
-        version: '1.0.1',
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
+    // Create MCP server using high-level API
+    server = new McpServer({
+      name: 'test-server',
+      version: '1.0.2',
+    });
 
     // Initialize services (without MCP client - using direct CLI)
     const codexService = new CodexReviewService(
@@ -138,7 +131,10 @@ describe('MCP Server Integration', () => {
   });
 
   afterAll(async () => {
-    await server.close();
+    // McpServer uses different close method
+    if (server && typeof server.close === 'function') {
+      await server.close();
+    }
   });
 
   it('should register tools successfully', () => {

@@ -9,11 +9,9 @@
  * MAJOR FIX #12: Use AbortController for timeout cancellation
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import PQueue from 'p-queue';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { ErrorHandler } from '../core/error-handler.js';
 import type { Logger } from '../core/logger.js';
@@ -50,7 +48,7 @@ export class ToolRegistry {
   private geminiQueue: PQueue;
 
   constructor(
-    private server: Server,
+    private server: McpServer,
     private dependencies: ToolDependencies
   ) {
     this.reviewStatusStore = ReviewStatusStore.getInstance();
@@ -66,100 +64,77 @@ export class ToolRegistry {
   }
 
   /**
-   * Register all tools with MCP server
+   * Register all tools with MCP server using high-level API
    */
   registerTools(): void {
-    const { logger } = this.dependencies;
+    const { logger, codexService, geminiService } = this.dependencies;
+    const maxCodeLength = this.dependencies.config.review.maxCodeLength;
 
-    // Register tools/list handler
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: this.getToolList(),
-    }));
-
-    // Register tools/call handler
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        logger.info({ tool: name }, 'Tool called');
-
-        switch (name) {
-          case 'review_code_with_codex':
-            return await this.handleCodexReview(args);
-
-          case 'review_code_with_gemini':
-            return await this.handleGeminiReview(args);
-
-          case 'review_code_combined':
-            return await this.handleCombinedReview(args);
-
-          case 'get_review_status':
-            return await this.handleGetReviewStatus(args);
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+    // Register Codex review tool if enabled
+    if (codexService) {
+      const reviewParamsSchema = createCodeReviewParamsSchema(maxCodeLength);
+      this.server.registerTool(
+        'review_code_with_codex',
+        {
+          title: 'Review Code with Codex',
+          description: 'Perform comprehensive code review using Codex AI',
+          inputSchema: reviewParamsSchema.shape,
+        },
+        async (args) => {
+          logger.info({ tool: 'review_code_with_codex' }, 'Tool called');
+          return await this.handleCodexReview(args);
         }
-      } catch (error) {
-        logger.error({ tool: name, error }, 'Tool execution failed');
+      );
+    }
 
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(ErrorHandler.createErrorResponse(error), null, 2),
-            },
-          ],
-          isError: true,
-        };
+    // Register Gemini review tool if enabled
+    if (geminiService) {
+      const reviewParamsSchema = createCodeReviewParamsSchema(maxCodeLength);
+      this.server.registerTool(
+        'review_code_with_gemini',
+        {
+          title: 'Review Code with Gemini',
+          description: 'Perform comprehensive code review using Gemini CLI',
+          inputSchema: reviewParamsSchema.shape,
+        },
+        async (args) => {
+          logger.info({ tool: 'review_code_with_gemini' }, 'Tool called');
+          return await this.handleGeminiReview(args);
+        }
+      );
+    }
+
+    // Register combined review tool if both services are enabled
+    if (codexService && geminiService) {
+      this.server.registerTool(
+        'review_code_combined',
+        {
+          title: 'Review Code Combined',
+          description: 'Perform code review using both Codex and Gemini, then aggregate results',
+          inputSchema: CombinedReviewInputSchema.shape,
+        },
+        async (args) => {
+          logger.info({ tool: 'review_code_combined' }, 'Tool called');
+          return await this.handleCombinedReview(args);
+        }
+      );
+    }
+
+    // Register review status tool (always available)
+    this.server.registerTool(
+      'get_review_status',
+      {
+        title: 'Get Review Status',
+        description: 'Get the status of an async code review by review ID',
+        inputSchema: ReviewStatusInputSchema.shape,
+      },
+      async (args) => {
+        logger.info({ tool: 'get_review_status' }, 'Tool called');
+        return await this.handleGetReviewStatus(args);
       }
-    });
+    );
 
     logger.info('All tools registered successfully');
-  }
-
-  /**
-   * Get list of available tools
-   * CRITICAL FIX #4: Use configured max code length
-   */
-  private getToolList() {
-    const tools = [];
-
-    // CRITICAL FIX #4: Use configured max code length (can be overridden per-request)
-    const maxCodeLength = this.dependencies.config.review.maxCodeLength;
-    const reviewParamsSchema = createCodeReviewParamsSchema(maxCodeLength);
-
-    if (this.dependencies.codexService) {
-      tools.push({
-        name: 'review_code_with_codex',
-        description: 'Perform comprehensive code review using Codex AI',
-        inputSchema: zodToJsonSchema(reviewParamsSchema, 'CodeReviewParams'),
-      });
-    }
-
-    if (this.dependencies.geminiService) {
-      tools.push({
-        name: 'review_code_with_gemini',
-        description: 'Perform comprehensive code review using Gemini CLI',
-        inputSchema: zodToJsonSchema(reviewParamsSchema, 'CodeReviewParams'),
-      });
-    }
-
-    if (this.dependencies.codexService && this.dependencies.geminiService) {
-      tools.push({
-        name: 'review_code_combined',
-        description: 'Perform code review using both Codex and Gemini, then aggregate results',
-        inputSchema: zodToJsonSchema(CombinedReviewInputSchema, 'CombinedReviewInput'),
-      });
-    }
-
-    // get_review_status is always available
-    tools.push({
-      name: 'get_review_status',
-      description: 'Get the status of an async code review by review ID',
-      inputSchema: zodToJsonSchema(ReviewStatusInputSchema, 'ReviewStatusInput'),
-    });
-
-    return tools;
   }
 
   /**
