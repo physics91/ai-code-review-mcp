@@ -233,7 +233,7 @@ Create a `config.json` in your project or use the default configuration:
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "logLevel": "info"
   },
   "codex": {
