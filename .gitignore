@@ -41,6 +41,9 @@ logs/
 tmp/
 temp/
 *.tmp
+test_*.json
+test_*.cjs
+test_*.js
 
 # OS
 Thumbs.db
