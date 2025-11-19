@@ -413,7 +413,7 @@ Please respond in JSON format with this structure:
       // We need to find the final assistant message
       const lines = cleaned.split('\n').filter(line => line.trim());
 
-      let finalMessage = '';
+      let parsed: any = null;
 
       // Parse JSONL output
       for (const line of lines) {
@@ -423,31 +423,29 @@ Please respond in JSON format with this structure:
           // Look for item.completed events with agent_message (contains JSON response)
           if (event.type === 'item.completed' && event.item) {
             if (event.item.type === 'agent_message') {
-              finalMessage = event.item.text || '';
+              // Parse the JSON text immediately to avoid double-parsing issues
+              parsed = JSON.parse(event.item.text || '{}');
             }
           }
           // Fallback: old format (message with role)
           else if (event.type === 'message' && event.role === 'assistant') {
-            finalMessage = event.content || '';
+            parsed = JSON.parse(event.content || '{}');
           }
         } catch {
-          // Skip non-JSON lines
+          // Skip non-JSON lines or malformed events
           continue;
         }
       }
 
-      if (!finalMessage) {
+      if (!parsed) {
         // Fallback: try to extract JSON from entire output
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
           this.logger.warn({ output: cleaned.substring(0, 500) }, 'No JSON found in Codex output');
           throw new ParseError('No JSON found in Codex output');
         }
-        finalMessage = jsonMatch[0];
+        parsed = JSON.parse(jsonMatch[0]);
       }
-
-      // Parse the final message
-      const parsed = JSON.parse(finalMessage);
 
       // Validate response against schema
       const validated = CodexResponseSchema.parse(parsed);
