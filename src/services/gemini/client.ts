@@ -150,8 +150,15 @@ export class GeminiReviewService {
         await this.initializeCLIPath();
       }
 
-      // Use prompt directly (user provides complete prompt)
-      const prompt = validated.prompt;
+      // Wrap user prompt with JSON format instruction
+      const prompt = `${validated.prompt}
+
+Please respond in JSON format with this structure:
+{
+  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
+  "overallAssessment": "string",
+  "recommendations": ["string"]
+}`;
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(

@@ -160,8 +160,15 @@ export class CodexReviewService {
       const cliPath = validated.options?.cliPath || this.config.cliPath;
       await this.validateCLIPath(cliPath);
 
-      // Use prompt directly (user provides complete prompt)
-      const prompt = validated.prompt;
+      // Wrap user prompt with JSON format instruction
+      const prompt = `${validated.prompt}
+
+Please respond in JSON format with this structure:
+{
+  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
+  "overallAssessment": "string",
+  "recommendations": ["string"]
+}`;
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
@@ -413,8 +420,14 @@ export class CodexReviewService {
         try {
           const event = JSON.parse(line);
 
-          // Look for assistant messages
-          if (event.type === 'message' && event.role === 'assistant') {
+          // Look for item.completed events with agent_message
+          if (event.type === 'item.completed' && event.item) {
+            if (event.item.type === 'agent_message' || event.item.type === 'reasoning') {
+              finalMessage = event.item.text || '';
+            }
+          }
+          // Fallback: old format (message with role)
+          else if (event.type === 'message' && event.role === 'assistant') {
             finalMessage = event.content || '';
           }
         } catch {
