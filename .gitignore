@@ -48,6 +48,7 @@ test_*.js
 # OS
 Thumbs.db
 .DS_Store
+nul
 
 # Config (keep examples)
 config/local.json
