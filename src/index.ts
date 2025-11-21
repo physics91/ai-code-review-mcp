@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Code Review MCP Server
+ * AI Code Agent MCP Server
  * Entry point for the MCP server
  */
 
@@ -10,9 +10,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 import { ConfigManager } from './core/config.js';
 import { Logger } from './core/logger.js';
-import { ReviewAggregator } from './services/aggregator/merger.js';
-import { CodexReviewService } from './services/codex/client.js';
-import { GeminiReviewService } from './services/gemini/client.js';
+import { AnalysisAggregator } from './services/aggregator/merger.js';
+import { CodexAnalysisService } from './services/codex/client.js';
+import { GeminiAnalysisService } from './services/gemini/client.js';
 import { ToolRegistry } from './tools/registry.js';
 
 /**
@@ -32,7 +32,7 @@ async function main() {
       file: config.logging.file,
     });
 
-    logger.info({ version: config.server.version }, 'Starting Code Review MCP Server');
+    logger.info({ version: config.server.version }, 'Starting AI Code Agent MCP Server');
 
     // Create MCP server using high-level API (automatically handles capabilities)
     const server = new McpServer({
@@ -42,14 +42,14 @@ async function main() {
 
     // Initialize services
     const codexService = config.codex.enabled
-      ? new CodexReviewService(config.codex, logger)
+      ? new CodexAnalysisService(config.codex, logger)
       : null;
 
     const geminiService = config.gemini.enabled
-      ? new GeminiReviewService(config.gemini, logger)
+      ? new GeminiAnalysisService(config.gemini, logger)
       : null;
 
-    const aggregator = new ReviewAggregator(config.review, logger);
+    const aggregator = new AnalysisAggregator(config.analysis, logger);
 
     // Register tools
     const registry = new ToolRegistry(server, {

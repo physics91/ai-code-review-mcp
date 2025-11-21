@@ -55,15 +55,12 @@ const FIELD_CONSTRAINTS: Record<string, { description: string; format?: string; 
     description: 'Prompt exceeds maximum allowed length',
   },
   'options.timeout': {
-    description: 'Execution timeout in milliseconds',
-    format: 'Number between 1000 and 300000 (1 second to 5 minutes)',
-    examples: ['60000', '120000'],
+    description: 'Execution timeout in milliseconds (0 = unlimited)',
+    format: 'Number 0 or greater (0 = unlimited, positive = timeout in ms)',
+    examples: ['0', '60000', '120000'],
   },
   'options.timeout.too_small': {
-    description: 'Timeout must be at least 1000ms (1 second)',
-  },
-  'options.timeout.too_big': {
-    description: 'Timeout cannot exceed 300000ms (5 minutes)',
+    description: 'Timeout must be 0 (unlimited) or a positive number',
   },
   'options.severity': {
     description: 'Minimum severity level to report',
@@ -405,7 +402,7 @@ export class ValidationUtils {
     const fieldNames = fieldErrors.map((e) => e.field);
 
     if (fieldNames.some((f) => f.startsWith('options.timeout'))) {
-      suggestions.push('Timeout must be between 1 second (1000ms) and 5 minutes (300000ms)');
+      suggestions.push('Timeout must be 0 (unlimited) or a positive number in milliseconds');
     }
 
     if (fieldNames.some((f) => f.startsWith('options.cliPath'))) {

@@ -1,32 +1,34 @@
 {
   "$schema": "./schema.json",
   "server": {
-    "name": "code-review-mcp",
-    "version": "1.0.13",
+    "name": "ai-code-agent-mcp",
+    "version": "1.0.1",
     "logLevel": "info",
     "transport": "stdio"
   },
   "codex": {
     "enabled": true,
     "cliPath": "auto",
-    "timeout": 60000,
+    "timeout": 0,
     "retryAttempts": 3,
     "retryDelay": 1000,
     "maxConcurrent": 1,
-    "model": null,
+    "model": "gpt-5.1",
+    "search": true,
+    "reasoningEffort": "high",
     "args": []
   },
   "gemini": {
     "enabled": true,
     "cliPath": "auto",
-    "timeout": 60000,
+    "timeout": 0,
     "retryAttempts": 3,
     "retryDelay": 1000,
     "maxConcurrent": 1,
-    "model": null,
+    "model": "gemini-3-pro-preview",
     "args": []
   },
-  "review": {
+  "analysis": {
     "maxCodeLength": 50000,
     "includeContext": true,
     "defaultLanguage": null,
@@ -53,7 +55,7 @@
     "pretty": true,
     "file": {
       "enabled": false,
-      "path": "./logs/code-review-mcp.log",
+      "path": "./logs/ai-code-agent-mcp.log",
       "maxSize": "10M",
       "maxFiles": 5
     }

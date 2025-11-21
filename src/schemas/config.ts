@@ -6,8 +6,8 @@ import { z } from 'zod';
 
 export const ServerConfigSchema = z.object({
   server: z.object({
-    name: z.string().default('code-review-mcp'),
-    version: z.string().default('1.0.13'),
+    name: z.string().default('ai-code-agent-mcp'),
+    version: z.string().default('1.1.0'),
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     transport: z.enum(['stdio', 'http']).default('stdio'),
   }),
@@ -15,26 +15,28 @@ export const ServerConfigSchema = z.object({
   codex: z.object({
     enabled: z.boolean().default(true),
     cliPath: z.string().default('codex'),
-    timeout: z.number().min(1000).max(300000).default(60000),
+    timeout: z.number().min(0).default(0), // 0 = unlimited
     retryAttempts: z.number().min(0).max(10).default(3),
     retryDelay: z.number().min(0).default(1000),
     maxConcurrent: z.number().min(1).max(10).default(1),
-    model: z.string().nullable().default(null),
+    model: z.string().nullable().default('gpt-5'),
+    search: z.boolean().default(true),
+    reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).default('high'),
     args: z.array(z.string()).default([]),
   }),
 
   gemini: z.object({
     enabled: z.boolean().default(true),
     cliPath: z.string().default('/usr/local/bin/gemini'),
-    timeout: z.number().min(1000).max(300000).default(60000),
+    timeout: z.number().min(0).default(0), // 0 = unlimited
     retryAttempts: z.number().min(0).max(10).default(3),
     retryDelay: z.number().min(0).default(1000),
     maxConcurrent: z.number().min(1).max(10).default(1),
-    model: z.string().nullable().default(null),
+    model: z.string().nullable().default('gemini-3-pro-preview'),
     args: z.array(z.string()).default([]),
   }),
 
-  review: z.object({
+  analysis: z.object({
     maxCodeLength: z.number().min(100).max(1000000).default(50000),
     includeContext: z.boolean().default(true),
     defaultLanguage: z.string().nullable().default(null),
@@ -59,7 +61,7 @@ export const ServerConfigSchema = z.object({
     pretty: z.boolean().default(true),
     file: z.object({
       enabled: z.boolean().default(false),
-      path: z.string().default('./logs/code-review-mcp.log'),
+      path: z.string().default('./logs/ai-code-agent-mcp.log'),
       maxSize: z.string().default('10M'),
       maxFiles: z.number().default(5),
     }),

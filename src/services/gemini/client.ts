@@ -1,6 +1,6 @@
 /**
- * Gemini Review Service
- * Handles code review using Gemini CLI
+ * Gemini Analysis Service
+ * Handles code analysis using Gemini CLI
  *
  * CRITICAL FIX #5: Gemini CLI path whitelist derived from config
  * MAJOR FIX #6: Honor per-request timeout, severity, cliPath options
@@ -17,7 +17,7 @@ import {
   TimeoutError,
   ParseError,
   SecurityError,
-  GeminiReviewError,
+  GeminiAnalysisError,
   GeminiTimeoutError,
   GeminiParseError,
 } from '../../core/error-handler.js';
@@ -25,7 +25,7 @@ import { type Logger } from '../../core/logger.js';
 import { RetryManager } from '../../core/retry.js';
 import { generateUUID, sanitizeParams } from '../../core/utils.js';
 import { GeminiResponseSchema, type GeminiResponse } from '../../schemas/responses.js';
-import { CodeReviewParamsSchema, ReviewResultSchema, type CodeReviewParams, type ReviewResult } from '../../schemas/tools.js';
+import { CodeAnalysisParamsSchema, AnalysisResultSchema, type CodeAnalysisParams, type AnalysisResult } from '../../schemas/tools.js';
 
 export interface GeminiServiceConfig {
   cliPath: string;
@@ -40,7 +40,7 @@ export interface GeminiServiceConfig {
  * Gemini Review Service
  * CRITICAL FIX #5: Whitelist now derived from config + environment
  */
-export class GeminiReviewService {
+export class GeminiAnalysisService {
   private retryManager: RetryManager;
   private allowedCLIPaths: string[];
   private detectedCLIPath: string | null = null;
@@ -132,15 +132,15 @@ export class GeminiReviewService {
    * Perform code review using Gemini CLI
    * MAJOR FIX #6: Honor per-request timeout, severity, cliPath options
    */
-  async reviewCode(params: CodeReviewParams): Promise<ReviewResult> {
+  async analyzeCode(params: CodeAnalysisParams): Promise<AnalysisResult> {
     const startTime = Date.now();
-    const reviewId = generateUUID();
+    const analysisId = generateUUID();
 
     try {
-      this.logger.info({ reviewId, params: sanitizeParams(params) }, 'Starting Gemini review');
+      this.logger.info({ analysisId, params: sanitizeParams(params) }, 'Starting Gemini review');
 
       // Validate input
-      const validated = CodeReviewParamsSchema.parse(params);
+      const validated = CodeAnalysisParamsSchema.parse(params);
 
       // MAJOR FIX #6: Use per-request timeout if specified
       const timeout = validated.options?.timeout ?? this.config.timeout;
@@ -169,7 +169,7 @@ ${validated.prompt}`;
       );
 
       // Parse and structure response
-      const review = this.parseGeminiOutput(output, reviewId);
+      const review = this.parseGeminiOutput(output, analysisId);
 
       // MAJOR FIX #6: Apply severity filtering if requested
       if (validated.options?.severity && validated.options.severity !== 'all') {
@@ -178,33 +178,33 @@ ${validated.prompt}`;
       }
 
       // Add metadata
-      review.metadata.reviewDuration = Date.now() - startTime;
+      review.metadata.analysisDuration = Date.now() - startTime;
 
       this.logger.info(
-        { reviewId, duration: review.metadata.reviewDuration, findings: review.findings.length },
+        { analysisId, duration: review.metadata.analysisDuration, findings: review.findings.length },
         'Gemini review completed'
       );
 
       return review;
     } catch (error) {
-      this.logger.error({ reviewId, error }, 'Gemini review failed');
+      this.logger.error({ analysisId, error }, 'Gemini review failed');
 
       // Wrap in domain-specific error if not already
-      if (error instanceof GeminiReviewError) {
+      if (error instanceof GeminiAnalysisError) {
         throw error;
       }
 
       if (error instanceof TimeoutError) {
-        throw new GeminiTimeoutError(error.message, reviewId, { cause: error });
+        throw new GeminiTimeoutError(error.message, analysisId, { cause: error });
       }
 
       if (error instanceof ParseError) {
-        throw new GeminiParseError(error.message, reviewId, { cause: error });
+        throw new GeminiParseError(error.message, analysisId, { cause: error });
       }
 
-      throw new GeminiReviewError(
+      throw new GeminiAnalysisError(
         error instanceof Error ? error.message : 'Unknown error during Gemini review',
-        reviewId,
+        analysisId,
         { cause: error }
       );
     }
@@ -215,7 +215,7 @@ ${validated.prompt}`;
    * Execute Gemini CLI command securely
    * MAJOR FIX #6: Honor per-request cliPath and timeout options
    */
-  private async executeGeminiCLI(prompt: string, params: CodeReviewParams, timeout: number): Promise<string> {
+  private async executeGeminiCLI(prompt: string, params: CodeAnalysisParams, timeout: number): Promise<string> {
     // MAJOR FIX #6: Use per-request cliPath if specified, otherwise use config
     const cliPath = params.options?.cliPath || this.config.cliPath;
 
@@ -231,7 +231,7 @@ ${validated.prompt}`;
       // Execute CLI using execa (secure, no shell injection)
       // Pass prompt via stdin to avoid Windows CMD newline issues
       const result = await execa(cliPath, args, {
-        timeout,
+        timeout: timeout === 0 ? undefined : timeout, // 0 = unlimited (no timeout)
         reject: true, // Throw on ANY non-zero exit code
         all: true,
         input: prompt, // Send prompt via stdin
@@ -388,8 +388,8 @@ ${validated.prompt}`;
    */
   private parseGeminiOutput(
     output: string,
-    reviewId: string
-  ): ReviewResult {
+    analysisId: string
+  ): AnalysisResult {
     try {
       // Clean output (remove ANSI codes, etc.)
       const cleaned = this.cleanOutput(output);
@@ -418,9 +418,9 @@ ${validated.prompt}`;
       const summary = this.calculateSummary(validated.findings);
 
       // Transform to internal format
-      const result: ReviewResult = {
+      const result: AnalysisResult = {
         success: true,
-        reviewId,
+        analysisId,
         timestamp: new Date().toISOString(),
         source: 'gemini',
         summary,
@@ -428,12 +428,12 @@ ${validated.prompt}`;
         overallAssessment: validated.overallAssessment,
         recommendations: validated.recommendations,
         metadata: {
-          reviewDuration: 0,
+          analysisDuration: 0,
         },
       };
 
       // Validate final result
-      ReviewResultSchema.parse(result);
+      AnalysisResultSchema.parse(result);
 
       return result;
     } catch (error) {

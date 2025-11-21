@@ -152,6 +152,16 @@ export class ConfigManager {
       if (env.CODEX_MODEL) {
         result.codex.model = env.CODEX_MODEL;
       }
+      if (env.CODEX_SEARCH !== undefined) {
+        result.codex.search = env.CODEX_SEARCH === 'true';
+      }
+      if (env.CODEX_REASONING_EFFORT) {
+        const validEfforts = ['minimal', 'low', 'medium', 'high'];
+        if (validEfforts.includes(env.CODEX_REASONING_EFFORT)) {
+          result.codex.reasoningEffort = env.CODEX_REASONING_EFFORT as 'minimal' | 'low' | 'medium' | 'high';
+        }
+        // Invalid values are silently ignored, schema default will be used
+      }
     }
 
     // Gemini overrides

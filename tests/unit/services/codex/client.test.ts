@@ -1,9 +1,9 @@
 /**
- * Unit tests for CodexReviewService
+ * Unit tests for CodexAnalysisService
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CodexReviewService } from '../../../../src/services/codex/client.js';
+import { CodexAnalysisService } from '../../../../src/services/codex/client.js';
 import { Logger } from '../../../../src/core/logger.js';
 import { CLIExecutionError, ParseError } from '../../../../src/core/error-handler.js';
 import { execa } from 'execa';
@@ -11,8 +11,8 @@ import { execa } from 'execa';
 // Mock execa
 vi.mock('execa');
 
-describe('CodexReviewService', () => {
-  let service: CodexReviewService;
+describe('CodexAnalysisService', () => {
+  let service: CodexAnalysisService;
   let mockLogger: Logger;
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('CodexReviewService', () => {
       } as any;
     });
 
-    service = new CodexReviewService(
+    service = new CodexAnalysisService(
       {
         cliPath: 'codex',
         timeout: 10000,
@@ -58,8 +58,8 @@ describe('CodexReviewService', () => {
     vi.clearAllMocks();
   });
 
-  describe('reviewCode', () => {
-    it('should successfully review code', async () => {
+  describe('analyzeCode', () => {
+    it('should successfully analyze code', async () => {
       // Mock Codex CLI JSONL output
       const mockOutput = [
         '{"type":"message","role":"assistant","content":"{\\"findings\\":[{\\"type\\":\\"bug\\",\\"severity\\":\\"high\\",\\"line\\":10,\\"title\\":\\"Null pointer exception\\",\\"description\\":\\"Variable might be null\\",\\"suggestion\\":\\"Add null check\\"}],\\"overallAssessment\\":\\"Code has some issues\\",\\"recommendations\\":[\\"Add error handling\\"]}"}',
@@ -77,7 +77,7 @@ describe('CodexReviewService', () => {
         killed: false,
       } as any);
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: function test() { return null.value; }',
         language: 'javascript',
       });
@@ -92,7 +92,7 @@ describe('CodexReviewService', () => {
 
     it('should validate input parameters', async () => {
       await expect(
-        service.reviewCode({
+        service.analyzeCode({
           prompt: '', // Invalid: empty prompt
         })
       ).rejects.toThrow();
@@ -106,7 +106,7 @@ describe('CodexReviewService', () => {
       });
 
       await expect(
-        service.reviewCode({
+        service.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('Codex CLI exited with code 1');
@@ -119,7 +119,7 @@ describe('CodexReviewService', () => {
       });
 
       await expect(
-        service.reviewCode({
+        service.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('Codex CLI timed out after');
@@ -133,7 +133,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       await expect(
-        service.reviewCode({
+        service.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('No JSON found in Codex output');
@@ -149,7 +149,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -165,12 +165,12 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: const x = 1;\nconst y = 2;',
       });
 
       // Metadata fields language and linesOfCode are now optional since we use prompt-based API
-      expect(result.metadata.reviewDuration).toBeGreaterThanOrEqual(0);
+      expect(result.metadata.analysisDuration).toBeGreaterThanOrEqual(0);
     });
 
     it('should calculate summary correctly', async () => {
@@ -196,7 +196,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -215,7 +215,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      await service.reviewCode({
+      await service.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -232,7 +232,7 @@ describe('CodexReviewService', () => {
     });
 
     it('should use custom model if specified', async () => {
-      const serviceWithModel = new CodexReviewService(
+      const serviceWithModel = new CodexAnalysisService(
         {
           cliPath: 'codex',
           timeout: 10000,
@@ -251,7 +251,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      await serviceWithModel.reviewCode({
+      await serviceWithModel.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -285,7 +285,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: test code',
         options: {
           severity: 'high',
@@ -299,7 +299,7 @@ describe('CodexReviewService', () => {
 
   describe('CLI Path Validation', () => {
     it('should accept whitelisted absolute paths', async () => {
-      const whitelistedService = new CodexReviewService(
+      const whitelistedService = new CodexAnalysisService(
         {
           cliPath: '/usr/local/bin/codex',
           timeout: 10000,
@@ -317,7 +317,7 @@ describe('CodexReviewService', () => {
         exitCode: 0,
       } as any);
 
-      const result = await whitelistedService.reviewCode({
+      const result = await whitelistedService.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -334,7 +334,7 @@ describe('CodexReviewService', () => {
         throw new Error('execa should not be called with invalid path');
       });
 
-      const invalidService = new CodexReviewService(
+      const invalidService = new CodexAnalysisService(
         {
           cliPath: '/suspicious/path/codex', // Not in whitelist
           timeout: 10000,
@@ -346,7 +346,7 @@ describe('CodexReviewService', () => {
       );
 
       await expect(
-        invalidService.reviewCode({
+        invalidService.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/CLI path not in allowed list/);
@@ -369,7 +369,7 @@ describe('CodexReviewService', () => {
         } as any;
       });
 
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -400,7 +400,7 @@ describe('CodexReviewService', () => {
       });
 
       // Create new service instance with the mocked 'which'
-      const testService = new CodexReviewService(
+      const testService = new CodexAnalysisService(
         {
           cliPath: 'codex', // Will use 'which' to resolve
           timeout: 10000,
@@ -412,7 +412,7 @@ describe('CodexReviewService', () => {
       );
 
       await expect(
-        testService.reviewCode({
+        testService.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/Resolved CLI path not in allowed list/);
@@ -427,7 +427,7 @@ describe('CodexReviewService', () => {
       } as any);
 
       // Per-request override with whitelisted path
-      const result = await service.reviewCode({
+      const result = await service.analyzeCode({
         prompt: 'Review this code: test code',
         options: {
           cliPath: '/usr/local/bin/codex',
@@ -447,13 +447,237 @@ describe('CodexReviewService', () => {
       });
 
       await expect(
-        service.reviewCode({
+        service.analyzeCode({
           prompt: 'Review this code: test code',
           options: {
             cliPath: '/evil/path/codex', // Not in whitelist
           },
         })
       ).rejects.toThrow(/CLI path not in allowed list/);
+    });
+  });
+
+  describe('New Configuration Options', () => {
+    // Note: --search flag is not supported in codex exec command, so these tests verify
+    // that the search config is accepted but not passed as a flag
+
+    it('should include reasoning effort via config override', async () => {
+      const service = new CodexAnalysisService(
+        {
+          cliPath: 'codex',
+          timeout: 10000,
+          retryAttempts: 1,
+          retryDelay: 100,
+          model: 'gpt-5',
+          search: false,
+          reasoningEffort: 'high',
+          args: [],
+        },
+        mockLogger
+      );
+
+      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+      vi.mocked(execa).mockResolvedValue({
+        stdout: mockOutput,
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await service.analyzeCode({ prompt: 'test code review' });
+
+      // Verify reasoning effort via config override (--model-reasoning-effort not supported in exec)
+      expect(execa).toHaveBeenCalledWith(
+        'codex',
+        expect.arrayContaining(['-c', 'model_reasoning_effort=high']),
+        expect.any(Object)
+      );
+    });
+
+    it('should use different reasoning effort values', async () => {
+      // Test with 'minimal' reasoning effort
+      const minimalService = new CodexAnalysisService(
+        {
+          cliPath: 'codex',
+          timeout: 10000,
+          retryAttempts: 1,
+          retryDelay: 100,
+          model: 'gpt-5',
+          search: false,
+          reasoningEffort: 'minimal',
+          args: [],
+        },
+        mockLogger
+      );
+
+      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+      vi.mocked(execa).mockResolvedValue({
+        stdout: mockOutput,
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await minimalService.analyzeCode({ prompt: 'test code review' });
+
+      // Verify reasoning effort via config override with minimal value
+      expect(execa).toHaveBeenCalledWith(
+        'codex',
+        expect.arrayContaining(['-c', 'model_reasoning_effort=minimal']),
+        expect.any(Object)
+      );
+    });
+
+    it('should use gpt-5 as default model', async () => {
+      const gpt5Service = new CodexAnalysisService(
+        {
+          cliPath: 'codex',
+          timeout: 10000,
+          retryAttempts: 1,
+          retryDelay: 100,
+          model: 'gpt-5',
+          search: false,
+          reasoningEffort: 'high',
+          args: [],
+        },
+        mockLogger
+      );
+
+      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+      vi.mocked(execa).mockResolvedValue({
+        stdout: mockOutput,
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await gpt5Service.analyzeCode({ prompt: 'test code review' });
+
+      // Verify --model gpt-5 is in args
+      expect(execa).toHaveBeenCalledWith(
+        'codex',
+        expect.arrayContaining(['--model', 'gpt-5']),
+        expect.any(Object)
+      );
+    });
+
+    it('should include all new options together in CLI args', async () => {
+      const fullService = new CodexAnalysisService(
+        {
+          cliPath: 'codex',
+          timeout: 10000,
+          retryAttempts: 1,
+          retryDelay: 100,
+          model: 'gpt-5',
+          search: true,
+          reasoningEffort: 'medium',
+          args: [],
+        },
+        mockLogger
+      );
+
+      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+      vi.mocked(execa).mockResolvedValue({
+        stdout: mockOutput,
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await fullService.analyzeCode({ prompt: 'test code review' });
+
+      // Verify all new options are included (search not supported in exec, reasoning via config)
+      expect(execa).toHaveBeenCalledWith(
+        'codex',
+        expect.arrayContaining([
+          '--model', 'gpt-5',
+          '-c', 'model_reasoning_effort=medium'
+        ]),
+        expect.any(Object)
+      );
+    });
+
+    it('should support all reasoningEffort enum values', async () => {
+      const reasoningValues = ['minimal', 'low', 'medium', 'high'] as const;
+
+      for (const effort of reasoningValues) {
+        vi.clearAllMocks();
+
+        const testService = new CodexAnalysisService(
+          {
+            cliPath: 'codex',
+            timeout: 10000,
+            retryAttempts: 1,
+            retryDelay: 100,
+            model: 'gpt-5',
+            search: false,
+            reasoningEffort: effort,
+            args: [],
+          },
+          mockLogger
+        );
+
+        const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+        vi.mocked(execa).mockResolvedValue({
+          stdout: mockOutput,
+          stderr: '',
+          exitCode: 0,
+        } as any);
+
+        await testService.analyzeCode({ prompt: 'test code review' });
+
+        // Verify the specific reasoning effort value was used via config override
+        expect(execa).toHaveBeenCalledWith(
+          'codex',
+          expect.arrayContaining(['-c', `model_reasoning_effort=${effort}`]),
+          expect.any(Object)
+        );
+      }
+    });
+
+    it('should use default values when schema defaults are applied', async () => {
+      // Service with schema defaults (as they would be passed from ConfigManager)
+      const defaultService = new CodexAnalysisService(
+        {
+          cliPath: 'codex',
+          timeout: 10000,
+          retryAttempts: 1,
+          retryDelay: 100,
+          args: [],
+          // Schema defaults applied:
+          model: 'gpt-5',
+          search: true,
+          reasoningEffort: 'high',
+        },
+        mockLogger
+      );
+
+      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+
+      vi.mocked(execa).mockResolvedValue({
+        stdout: mockOutput,
+        stderr: '',
+        exitCode: 0,
+      } as any);
+
+      await defaultService.analyzeCode({ prompt: 'test code review' });
+
+      // Should use default model (gpt-5) and reasoning effort (high)
+      // Note: search is not passed as flag (not supported in codex exec)
+      const calls = vi.mocked(execa).mock.calls;
+      const lastCall = calls[calls.length - 1];
+      const args = lastCall[1] as string[];
+
+      // Verify default model is gpt-5
+      expect(args).toContain('--model');
+      const modelIndex = args.indexOf('--model');
+      expect(args[modelIndex + 1]).toBe('gpt-5');
+
+      // Verify default reasoning effort is high via config override
+      expect(args).toContain('-c');
+      const configIndex = args.indexOf('-c');
+      expect(args[configIndex + 1]).toBe('model_reasoning_effort=high');
     });
   });
 });

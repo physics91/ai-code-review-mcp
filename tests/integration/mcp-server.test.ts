@@ -7,9 +7,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { Logger } from '../../src/core/logger.js';
-import { CodexReviewService } from '../../src/services/codex/client.js';
-import { GeminiReviewService } from '../../src/services/gemini/client.js';
-import { ReviewAggregator } from '../../src/services/aggregator/merger.js';
+import { CodexAnalysisService } from '../../src/services/codex/client.js';
+import { GeminiAnalysisService } from '../../src/services/gemini/client.js';
+import { AnalysisAggregator } from '../../src/services/aggregator/merger.js';
 import type { ServerConfig } from '../../src/schemas/config.js';
 import { execa } from 'execa';
 
@@ -61,7 +61,7 @@ describe('MCP Server Integration', () => {
         model: null,
         args: [],
       },
-      review: {
+      analysis: {
         maxCodeLength: 50000,
         includeContext: true,
         defaultLanguage: null,
@@ -103,18 +103,18 @@ describe('MCP Server Integration', () => {
     });
 
     // Initialize services (without MCP client - using direct CLI)
-    const codexService = new CodexReviewService(
+    const codexService = new CodexAnalysisService(
       mockConfig.codex,
       mockLogger
     );
 
-    const geminiService = new GeminiReviewService(
+    const geminiService = new GeminiAnalysisService(
       mockConfig.gemini,
       mockLogger
     );
 
-    const aggregator = new ReviewAggregator(
-      mockConfig.review,
+    const aggregator = new AnalysisAggregator(
+      mockConfig.analysis,
       mockLogger
     );
 
@@ -178,12 +178,12 @@ describe('MCP Server Integration', () => {
         } as any;
       });
 
-      const codexService = new CodexReviewService(
+      const codexService = new CodexAnalysisService(
         mockConfig.codex,
         mockLogger
       );
 
-      const result = await codexService.reviewCode({
+      const result = await codexService.analyzeCode({
         prompt: 'Review this code: function test() { return 1; }',
       });
 
@@ -228,7 +228,7 @@ describe('MCP Server Integration', () => {
         } as any;
       });
 
-      const codexService = new CodexReviewService(
+      const codexService = new CodexAnalysisService(
         {
           ...mockConfig.codex,
           retryAttempts: 2,
@@ -237,7 +237,7 @@ describe('MCP Server Integration', () => {
         mockLogger
       );
 
-      const result = await codexService.reviewCode({
+      const result = await codexService.analyzeCode({
         prompt: 'Review this code: test code',
       });
 
@@ -255,7 +255,7 @@ describe('MCP Server Integration', () => {
         throw new Error('execa should not be called with invalid path');
       });
 
-      const codexService = new CodexReviewService(
+      const codexService = new CodexAnalysisService(
         {
           ...mockConfig.codex,
           cliPath: '/invalid/path/codex', // Not in whitelist
@@ -264,7 +264,7 @@ describe('MCP Server Integration', () => {
       );
 
       await expect(
-        codexService.reviewCode({
+        codexService.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow(/CLI path not in allowed list|Failed to validate CLI path/);
@@ -287,13 +287,13 @@ describe('MCP Server Integration', () => {
         };
       });
 
-      const codexService = new CodexReviewService(
+      const codexService = new CodexAnalysisService(
         mockConfig.codex,
         mockLogger
       );
 
       await expect(
-        codexService.reviewCode({
+        codexService.analyzeCode({
           prompt: 'Review this code: test code',
         })
       ).rejects.toThrow('timed out');

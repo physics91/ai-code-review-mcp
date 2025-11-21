@@ -1,8 +1,8 @@
 /**
- * Common types for Code Review MCP Server
+ * Common types for AI Code Agent MCP Server
  */
 
-export type ReviewSource = 'codex' | 'gemini' | 'combined';
+export type AnalysisSource = 'codex' | 'gemini' | 'combined';
 
 export type FindingType = 'bug' | 'security' | 'performance' | 'style' | 'suggestion';
 
@@ -10,11 +10,11 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
 export type Confidence = 'high' | 'medium' | 'low';
 
-export type ReviewFocus = 'security' | 'performance' | 'style' | 'bugs' | 'all';
+export type AnalysisFocus = 'security' | 'performance' | 'style' | 'bugs' | 'all';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-export interface ReviewFinding {
+export interface AnalysisFinding {
   type: FindingType;
   severity: Severity;
   line: number | null;
@@ -28,7 +28,7 @@ export interface ReviewFinding {
   code?: string;
 }
 
-export interface ReviewSummary {
+export interface AnalysisSummary {
   totalFindings: number;
   critical: number;
   high: number;
@@ -36,19 +36,19 @@ export interface ReviewSummary {
   low: number;
 }
 
-export interface ReviewMetadata {
+export interface AnalysisMetadata {
   language?: string;
   linesOfCode: number;
-  reviewDuration: number;
+  analysisDuration: number;
 }
 
-export interface CodeReviewParams {
+export interface CodeAnalysisParams {
   code: string;
   language?: string;
   context?: {
     fileName?: string;
     projectType?: string;
-    reviewFocus?: ReviewFocus[];
+    analysisFocus?: AnalysisFocus[];
   };
   options?: {
     timeout?: number;
@@ -58,34 +58,34 @@ export interface CodeReviewParams {
   };
 }
 
-export interface ReviewResult {
+export interface AnalysisResult {
   success: boolean;
-  reviewId: string;
+  analysisId: string;
   timestamp: string;
-  source: ReviewSource;
-  summary: ReviewSummary;
-  findings: ReviewFinding[];
+  source: AnalysisSource;
+  summary: AnalysisSummary;
+  findings: AnalysisFinding[];
   overallAssessment: string;
   recommendations?: string[];
-  metadata: ReviewMetadata;
+  metadata: AnalysisMetadata;
 }
 
-export interface AggregatedFinding extends ReviewFinding {
-  sources: ReviewSource[];
+export interface AggregatedFinding extends AnalysisFinding {
+  sources: AnalysisSource[];
   confidence: Confidence;
 }
 
-export interface AggregatedReview extends Omit<ReviewResult, 'source' | 'summary' | 'findings'> {
+export interface AggregatedAnalysis extends Omit<AnalysisResult, 'source' | 'summary' | 'findings'> {
   source: 'combined';
-  summary: ReviewSummary & {
+  summary: AnalysisSummary & {
     consensus: number;
   };
   findings: AggregatedFinding[];
-  individualReviews?: {
-    codex?: ReviewResult;
-    gemini?: ReviewResult;
+  individualAnalyses?: {
+    codex?: AnalysisResult;
+    gemini?: AnalysisResult;
   };
-  metadata: ReviewMetadata & {
+  metadata: AnalysisMetadata & {
     codexDuration?: number;
     geminiDuration?: number;
   };

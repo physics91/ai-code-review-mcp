@@ -13,10 +13,10 @@ export enum ErrorCode {
   NETWORK_ERROR = 'NETWORK_ERROR',
   PARSE_ERROR = 'PARSE_ERROR',
   SECURITY_ERROR = 'SECURITY_ERROR',
-  CODEX_REVIEW_ERROR = 'CODEX_REVIEW_ERROR',
+  CODEX_ANALYSIS_ERROR = 'CODEX_ANALYSIS_ERROR',
   CODEX_TIMEOUT_ERROR = 'CODEX_TIMEOUT_ERROR',
   CODEX_PARSE_ERROR = 'CODEX_PARSE_ERROR',
-  GEMINI_REVIEW_ERROR = 'GEMINI_REVIEW_ERROR',
+  GEMINI_ANALYSIS_ERROR = 'GEMINI_ANALYSIS_ERROR',
   GEMINI_TIMEOUT_ERROR = 'GEMINI_TIMEOUT_ERROR',
   GEMINI_PARSE_ERROR = 'GEMINI_PARSE_ERROR',
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
@@ -92,28 +92,28 @@ export class SecurityError extends BaseError {
 }
 
 /**
- * Codex Review Error - Base class for Codex-specific errors
+ * Codex Analysis Error - Base class for Codex-specific errors
  */
-export class CodexReviewError extends BaseError {
+export class CodexAnalysisError extends BaseError {
   constructor(
     message: string,
-    public readonly reviewId: string,
+    public readonly analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, ErrorCode.CODEX_REVIEW_ERROR, { ...details, reviewId });
+    super(message, ErrorCode.CODEX_ANALYSIS_ERROR, { ...details, analysisId });
   }
 }
 
 /**
  * Codex Timeout Error
  */
-export class CodexTimeoutError extends CodexReviewError {
+export class CodexTimeoutError extends CodexAnalysisError {
   constructor(
     message: string,
-    reviewId: string,
+    analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, reviewId, details);
+    super(message, analysisId, details);
     this.code = ErrorCode.CODEX_TIMEOUT_ERROR;
   }
 }
@@ -121,40 +121,40 @@ export class CodexTimeoutError extends CodexReviewError {
 /**
  * Codex Parse Error
  */
-export class CodexParseError extends CodexReviewError {
+export class CodexParseError extends CodexAnalysisError {
   constructor(
     message: string,
-    reviewId: string,
+    analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, reviewId, details);
+    super(message, analysisId, details);
     this.code = ErrorCode.CODEX_PARSE_ERROR;
   }
 }
 
 /**
- * Gemini Review Error - Base class for Gemini-specific errors
+ * Gemini Analysis Error - Base class for Gemini-specific errors
  */
-export class GeminiReviewError extends BaseError {
+export class GeminiAnalysisError extends BaseError {
   constructor(
     message: string,
-    public readonly reviewId: string,
+    public readonly analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, ErrorCode.GEMINI_REVIEW_ERROR, { ...details, reviewId });
+    super(message, ErrorCode.GEMINI_ANALYSIS_ERROR, { ...details, analysisId });
   }
 }
 
 /**
  * Gemini Timeout Error
  */
-export class GeminiTimeoutError extends GeminiReviewError {
+export class GeminiTimeoutError extends GeminiAnalysisError {
   constructor(
     message: string,
-    reviewId: string,
+    analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, reviewId, details);
+    super(message, analysisId, details);
     this.code = ErrorCode.GEMINI_TIMEOUT_ERROR;
   }
 }
@@ -162,13 +162,13 @@ export class GeminiTimeoutError extends GeminiReviewError {
 /**
  * Gemini Parse Error
  */
-export class GeminiParseError extends GeminiReviewError {
+export class GeminiParseError extends GeminiAnalysisError {
   constructor(
     message: string,
-    reviewId: string,
+    analysisId: string,
     details?: { cause?: unknown; [key: string]: unknown }
   ) {
-    super(message, reviewId, details);
+    super(message, analysisId, details);
     this.code = ErrorCode.GEMINI_PARSE_ERROR;
   }
 }

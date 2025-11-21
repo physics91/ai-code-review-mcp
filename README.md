@@ -1,14 +1,14 @@
-# AI Code Review MCP Server
+# AI Code Agent MCP Server
 
-[![CI](https://github.com/physics91/ai-code-review-mcp/workflows/CI/badge.svg)](https://github.com/physics91/ai-code-review-mcp/actions)
-[![npm version](https://img.shields.io/npm/v/code-review-mcp.svg)](https://www.npmjs.com/package/code-review-mcp)
-[![npm downloads](https://img.shields.io/npm/dm/code-review-mcp.svg)](https://www.npmjs.com/package/code-review-mcp)
+[![CI](https://github.com/physics91/ai-code-agent-mcp/workflows/CI/badge.svg)](https://github.com/physics91/ai-code-agent-mcp/actions)
+[![npm version](https://img.shields.io/npm/v/ai-code-agent-mcp.svg)](https://www.npmjs.com/package/ai-code-agent-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/ai-code-agent-mcp.svg)](https://www.npmjs.com/package/ai-code-agent-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/physics91/ai-code-review-mcp/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/physics91/ai-code-agent-mcp/pulls)
 
-A comprehensive Model Context Protocol (MCP) server that provides AI-powered code review capabilities using both Codex CLI and Gemini CLI. This server enables intelligent, automated code analysis with support for multiple AI reviewers, finding aggregation, and detailed security and performance assessments.
+A comprehensive Model Context Protocol (MCP) server that provides AI-powered code analysis capabilities using both Codex CLI and Gemini CLI. This server enables intelligent, automated code analysis with support for multiple AI agents, finding aggregation, and detailed security and performance assessments.
 
 ## Features
 
@@ -50,13 +50,13 @@ A comprehensive Model Context Protocol (MCP) server that provides AI-powered cod
 
 ```bash
 # Install globally
-npm install -g code-review-mcp
+npm install -g ai-code-agent-mcp
 
 # Or use directly with npx
-npx code-review-mcp
+npx ai-code-agent-mcp
 ```
 
-**NPM Package**: [code-review-mcp](https://www.npmjs.com/package/code-review-mcp)
+**NPM Package**: [ai-code-agent-mcp](https://www.npmjs.com/package/ai-code-agent-mcp)
 
 ### From Source
 
@@ -233,7 +233,7 @@ Create a `config.json` in your project or use the default configuration:
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "logLevel": "info"
   },
   "codex": {
@@ -241,7 +241,9 @@ Create a `config.json` in your project or use the default configuration:
     "cliPath": "auto",
     "timeout": 60000,
     "retryAttempts": 3,
-    "model": null,
+    "model": "gpt-5",
+    "search": true,
+    "reasoningEffort": "high",
     "args": []
   },
   "gemini": {
@@ -249,7 +251,7 @@ Create a `config.json` in your project or use the default configuration:
     "cliPath": "auto",
     "timeout": 60000,
     "retryAttempts": 3,
-    "model": null,
+    "model": "gemini-3-pro-preview",
     "args": []
   },
   "review": {
@@ -290,9 +292,9 @@ GEMINI_ENABLED=true
 
 The MCP server exposes the following tools:
 
-#### 1. review_code_with_codex
+#### 1. analyze_code_with_codex
 
-Perform code review using Codex AI.
+Perform code analysis using Codex AI.
 
 **Input Parameters:**
 ```typescript
@@ -317,9 +319,9 @@ Perform code review using Codex AI.
 **Example Usage in Claude:**
 
 ```
-Please review this code using Codex:
+Please analyze this code using Codex:
 
-[Call: review_code_with_codex]
+[Call: analyze_code_with_codex]
 {
   "code": "function calculateTotal(items) { let total = 0; for(let i=0; i<=items.length; i++) { total += items[i].price; } return total; }",
   "language": "javascript",
@@ -363,18 +365,18 @@ Please review this code using Codex:
 }
 ```
 
-#### 2. review_code_with_gemini
+#### 2. analyze_code_with_gemini
 
-Perform code review using Gemini CLI.
+Perform code analysis using Gemini CLI.
 
-**Input Parameters:** Same as `review_code_with_codex`
+**Input Parameters:** Same as `analyze_code_with_codex`
 
 **Example Usage:**
 
 ```
-Review this Python code with Gemini:
+Analyze this Python code with Gemini:
 
-[Call: review_code_with_gemini]
+[Call: analyze_code_with_gemini]
 {
   "code": "def process_data(data):\n    result = []\n    for item in data:\n        result.append(item * 2)\n    return result",
   "language": "python",
@@ -384,9 +386,9 @@ Review this Python code with Gemini:
 }
 ```
 
-#### 3. review_code_combined
+#### 3. analyze_code_combined
 
-Perform code review using both Codex and Gemini, then aggregate results.
+Perform code analysis using both Codex and Gemini, then aggregate results.
 
 **Input Parameters:**
 ```typescript
@@ -402,8 +404,8 @@ Perform code review using both Codex and Gemini, then aggregate results.
     timeout?: number;              // Timeout for entire operation
     includeExplanations?: boolean;
     severity?: 'all' | 'high' | 'medium';
-    parallelExecution?: boolean;   // Run both reviewers in parallel
-    includeIndividualReviews?: boolean; // Include separate reviews in output
+    parallelExecution?: boolean;   // Run both analyzers in parallel
+    includeIndividualAnalyses?: boolean; // Include separate analyses in output
   };
 }
 ```
@@ -411,9 +413,9 @@ Perform code review using both Codex and Gemini, then aggregate results.
 **Example Usage:**
 
 ```
-Please perform a comprehensive review using both Codex and Gemini:
+Please perform a comprehensive analysis using both Codex and Gemini:
 
-[Call: review_code_combined]
+[Call: analyze_code_combined]
 {
   "code": "class UserAuth { login(user, pass) { if(user && pass) { return db.query('SELECT * FROM users WHERE username=' + user); } } }",
   "language": "javascript",
@@ -423,7 +425,7 @@ Please perform a comprehensive review using both Codex and Gemini:
   },
   "options": {
     "parallelExecution": true,
-    "includeIndividualReviews": false
+    "includeIndividualAnalyses": false
   }
 }
 ```
@@ -455,23 +457,23 @@ Please perform a comprehensive review using both Codex and Gemini:
       "confidence": "high"
     }
   ],
-  "overallAssessment": "Combined review from 2 reviewers: Found 2 critical issues that require immediate attention.",
+  "overallAssessment": "Combined analysis from 2 analyzers: Found 2 critical issues that require immediate attention.",
   "metadata": {
-    "reviewDuration": 4523,
+    "analysisDuration": 4523,
     "codexDuration": 2341,
     "geminiDuration": 2182
   }
 }
 ```
 
-#### 4. get_review_status
+#### 4. get_analysis_status
 
-Check the status of an async review operation (for future async support).
+Check the status of an async analysis operation (for future async support).
 
 **Input Parameters:**
 ```typescript
 {
-  reviewId: string; // UUID of the review
+  analysisId: string; // UUID of the analysis
 }
 ```
 
@@ -508,7 +510,7 @@ Focus areas:
 
 ### Parallel Execution
 
-For faster combined reviews:
+For faster combined analyses:
 
 ```typescript
 {
@@ -525,7 +527,7 @@ For faster combined reviews:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `server.name` | string | "code-review-mcp" | Server name |
+| `server.name` | string | "ai-code-agent-mcp" | Server name |
 | `server.version` | string | "1.0.1" | Server version |
 | `server.logLevel` | string | "info" | Log level (debug/info/warn/error) |
 
@@ -533,7 +535,7 @@ For faster combined reviews:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `codex.enabled` | boolean | true | Enable Codex reviews |
+| `codex.enabled` | boolean | true | Enable Codex analysis |
 | `codex.timeout` | number | 60000 | Timeout in milliseconds |
 | `codex.retryAttempts` | number | 3 | Number of retry attempts |
 | `codex.model` | string | null | Codex model override |
@@ -542,19 +544,19 @@ For faster combined reviews:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `gemini.enabled` | boolean | true | Enable Gemini reviews |
+| `gemini.enabled` | boolean | true | Enable Gemini analysis |
 | `gemini.cliPath` | string | "/usr/local/bin/gemini" | Path to Gemini CLI |
 | `gemini.timeout` | number | 60000 | Timeout in milliseconds |
 | `gemini.retryAttempts` | number | 3 | Number of retry attempts |
 | `gemini.model` | string | null | Gemini model override |
 
-### Review Configuration
+### Analysis Configuration
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `review.maxCodeLength` | number | 50000 | Maximum code length in bytes |
-| `review.deduplication.enabled` | boolean | true | Enable finding deduplication |
-| `review.deduplication.similarityThreshold` | number | 0.8 | Similarity threshold (0-1) |
+| `analysis.maxCodeLength` | number | 50000 | Maximum code length in bytes |
+| `analysis.deduplication.enabled` | boolean | true | Enable finding deduplication |
+| `analysis.deduplication.similarityThreshold` | number | 0.8 | Similarity threshold (0-1) |
 
 ## Error Handling
 
@@ -576,8 +578,8 @@ The server includes comprehensive error handling:
 Common error types:
 - `VALIDATION_ERROR`: Invalid input parameters
 - `TIMEOUT_ERROR`: Operation timed out
-- `CLI_EXECUTION_ERROR`: Gemini CLI failed
-- `MCP_TOOL_ERROR`: Codex MCP tool failed
+- `CLI_EXECUTION_ERROR`: CLI execution failed
+- `PARSE_ERROR`: Failed to parse CLI output
 - `CONFIGURATION_ERROR`: Invalid configuration
 
 ## Security Considerations
@@ -591,8 +593,8 @@ Common error types:
 ## Performance
 
 Performance targets:
-- Single review: <5s (typical), <30s (maximum)
-- Combined review: <8s (typical), <60s (maximum)
+- Single analysis: <5s (typical), <30s (maximum)
+- Combined analysis: <8s (typical), <60s (maximum)
 - Memory usage: <200MB (active), <50MB (idle)
 - Concurrent reviews: 10 (default), 50 (maximum)
 
@@ -604,8 +606,8 @@ Structured JSON logs with Pino:
 {
   "level": "info",
   "timestamp": "2025-01-17T10:30:00.000Z",
-  "msg": "Review completed",
-  "reviewId": "uuid",
+  "msg": "Analysis completed",
+  "analysisId": "uuid",
   "source": "codex",
   "duration": 4532,
   "findings": 12
@@ -622,8 +624,8 @@ CODE_REVIEW_MCP_LOG_LEVEL=debug
 ### Setup
 
 ```bash
-git clone https://github.com/yourusername/code-review-mcp.git
-cd code-review-mcp
+git clone https://github.com/physics91/ai-code-agent-mcp.git
+cd ai-code-agent-mcp
 npm install
 ```
 
@@ -678,7 +680,7 @@ npm run lint:fix
 2. Check CLI path in configuration
 3. Ensure executable permissions: `chmod +x /path/to/gemini`
 
-### Reviews timeout
+### Analysis timeout
 
 **Solution**:
 1. Increase timeout in configuration
@@ -690,7 +692,7 @@ npm run lint:fix
 **Solution**:
 1. Disable cache if not needed
 2. Reduce `maxConcurrent` setting
-3. Review logs for memory leaks
+3. Check logs for memory leaks
 
 ## Documentation
 
@@ -725,23 +727,24 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- GitHub Issues: https://github.com/physics91/ai-code-review-mcp/issues
-- Documentation: https://github.com/physics91/ai-code-review-mcp/wiki
-- Discussions: https://github.com/physics91/ai-code-review-mcp/discussions
+- GitHub Issues: https://github.com/physics91/ai-code-agent-mcp/issues
+- Documentation: https://github.com/physics91/ai-code-agent-mcp/wiki
+- Discussions: https://github.com/physics91/ai-code-agent-mcp/discussions
 
 ## Roadmap
 
 ### Short-term (3-6 months)
-- [ ] Support for additional AI reviewers (Claude, GPT-4)
-- [ ] Custom review templates
-- [ ] Review history and analytics
+- [ ] Support for additional AI analyzers
+- [ ] Custom analysis templates
+- [ ] Analysis history and analytics
 - [ ] Webhook notifications
-- [ ] Multi-file project review
+- [ ] Multi-file project analysis
+- [ ] AI debate/discussion features
 
 ### Long-term (6-12 months)
 - [ ] ML-based finding prioritization
 - [ ] CI/CD integrations
-- [ ] Review collaboration features
+- [ ] Analysis collaboration features
 - [ ] Plugin system
 - [ ] Web dashboard
 
@@ -754,5 +757,5 @@ MIT License - see LICENSE file for details
 ---
 
 **Version**: 1.0.1
-**Last Updated**: 2025-01-19
+**Last Updated**: 2025-11-21
 **Status**: Production Ready

@@ -1,6 +1,6 @@
 /**
- * Codex Review Service
- * Handles code review using Codex CLI
+ * Codex Analysis Service
+ * Handles code analysis using Codex CLI
  *
  * Migrated from MCP tool to direct CLI execution for consistency with Gemini service
  */
@@ -15,7 +15,7 @@ import {
   TimeoutError,
   ParseError,
   SecurityError,
-  CodexReviewError,
+  CodexAnalysisError,
   CodexTimeoutError,
   CodexParseError,
 } from '../../core/error-handler.js';
@@ -23,7 +23,7 @@ import { type Logger } from '../../core/logger.js';
 import { RetryManager } from '../../core/retry.js';
 import { generateUUID, sanitizeParams } from '../../core/utils.js';
 import { CodexResponseSchema, type CodexResponse } from '../../schemas/responses.js';
-import { CodeReviewParamsSchema, ReviewResultSchema, type CodeReviewParams, type ReviewResult } from '../../schemas/tools.js';
+import { CodeAnalysisParamsSchema, AnalysisResultSchema, type CodeAnalysisParams, type AnalysisResult } from '../../schemas/tools.js';
 
 export interface CodexServiceConfig {
   cliPath: string;
@@ -31,14 +31,16 @@ export interface CodexServiceConfig {
   retryAttempts: number;
   retryDelay: number;
   model?: string | null;
+  search?: boolean;
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
   args?: string[];
 }
 
 /**
- * Codex Review Service
+ * Codex Analysis Service
  * Uses direct CLI execution instead of MCP tool
  */
-export class CodexReviewService {
+export class CodexAnalysisService {
   private retryManager: RetryManager;
   private allowedCLIPaths: string[];
   private detectedCLIPath: string | null = null;
@@ -138,15 +140,15 @@ export class CodexReviewService {
   /**
    * Perform code review using Codex CLI
    */
-  async reviewCode(params: CodeReviewParams): Promise<ReviewResult> {
+  async analyzeCode(params: CodeAnalysisParams): Promise<AnalysisResult> {
     const startTime = Date.now();
-    const reviewId = generateUUID();
+    const analysisId = generateUUID();
 
     try {
-      this.logger.info({ reviewId, params: sanitizeParams(params) }, 'Starting Codex review');
+      this.logger.info({ analysisId, params: sanitizeParams(params) }, 'Starting Codex review');
 
       // Validate input
-      const validated = CodeReviewParamsSchema.parse(params);
+      const validated = CodeAnalysisParamsSchema.parse(params);
 
       // Use per-request timeout if specified
       const timeout = validated.options?.timeout ?? this.config.timeout;
@@ -179,7 +181,7 @@ ${validated.prompt}`;
       );
 
       // Parse and structure response
-      const review = this.parseCodexOutput(output, reviewId);
+      const review = this.parseCodexOutput(output, analysisId);
 
       // Apply severity filtering if requested
       if (validated.options?.severity && validated.options.severity !== 'all') {
@@ -188,19 +190,19 @@ ${validated.prompt}`;
       }
 
       // Add metadata
-      review.metadata.reviewDuration = Date.now() - startTime;
+      review.metadata.analysisDuration = Date.now() - startTime;
 
       this.logger.info(
-        { reviewId, duration: review.metadata.reviewDuration, findings: review.findings.length },
+        { analysisId, duration: review.metadata.analysisDuration, findings: review.findings.length },
         'Codex review completed'
       );
 
       return review;
     } catch (error) {
-      this.logger.error({ reviewId, error }, 'Codex review failed');
+      this.logger.error({ analysisId, error }, 'Codex review failed');
 
       // Wrap in domain-specific error if not already
-      if (error instanceof CodexReviewError) {
+      if (error instanceof CodexAnalysisError) {
         throw error;
       }
 
@@ -210,16 +212,16 @@ ${validated.prompt}`;
       }
 
       if (error instanceof TimeoutError) {
-        throw new CodexTimeoutError(error.message, reviewId, { cause: error });
+        throw new CodexTimeoutError(error.message, analysisId, { cause: error });
       }
 
       if (error instanceof ParseError) {
-        throw new CodexParseError(error.message, reviewId, { cause: error });
+        throw new CodexParseError(error.message, analysisId, { cause: error });
       }
 
-      throw new CodexReviewError(
+      throw new CodexAnalysisError(
         error instanceof Error ? error.message : 'Unknown error during Codex review',
-        reviewId,
+        analysisId,
         { cause: error }
       );
     }
@@ -238,9 +240,9 @@ ${validated.prompt}`;
 
     try {
       // Execute CLI using execa (secure, no shell injection)
-      // Pass prompt via stdin to avoid Windows CMD newline issues
-      const result = await execa(cliPath, ['e', ...args], {
-        timeout,
+      // Pass prompt via stdin using '-' argument to indicate stdin input
+      const result = await execa(cliPath, ['e', ...args, '-'], {
+        timeout: timeout === 0 ? undefined : timeout, // 0 = unlimited (no timeout)
         reject: true, // Throw on ANY non-zero exit code
         all: true,
         input: prompt, // Send prompt via stdin
@@ -379,15 +381,19 @@ ${validated.prompt}`;
   private buildCLIArgs(): string[] {
     const args: string[] = [];
 
-    // Add configured arguments
-    if (this.config.args && this.config.args.length > 0) {
-      args.push(...this.config.args);
-    }
-
     // Add model if specified
     if (this.config.model) {
       args.push('--model', this.config.model);
     }
+
+    // Add search flag if enabled (not supported in codex exec, using config override)
+    // if (this.config.search) {
+    //   args.push('--search');
+    // }
+
+    // Add reasoning effort via config override (--model-reasoning-effort not supported in exec)
+    const reasoningEffort = this.config.reasoningEffort ?? 'high';
+    args.push('-c', `model_reasoning_effort=${reasoningEffort}`);
 
     // Add JSON output flag
     args.push('--json');
@@ -398,6 +404,33 @@ ${validated.prompt}`;
     // Use read-only sandbox for safety
     args.push('--sandbox', 'read-only');
 
+    // Add user-provided arguments AFTER mandatory safety flags
+    // This prevents bypassing security options like --sandbox
+    if (this.config.args && this.config.args.length > 0) {
+      // Filter out dangerous flags that could override safety settings
+      // Using exact match or flag=value pattern to avoid filtering all --flags
+      const dangerousFlags = ['--sandbox', '--json', '--no-sandbox', '--skip-git-repo-check'];
+      const safeArgs = this.config.args.filter(arg => {
+        const lowerArg = arg.toLowerCase();
+        // Check for exact match or flag=value pattern
+        const isDangerous = dangerousFlags.some(flag =>
+          lowerArg === flag || lowerArg.startsWith(flag + '=')
+        );
+        // Also block the '--' separator which ends flag parsing
+        const isSeparator = arg === '--';
+        return !isDangerous && !isSeparator;
+      });
+
+      if (safeArgs.length !== this.config.args.length) {
+        this.logger.warn(
+          { filtered: this.config.args.length - safeArgs.length },
+          'Some user-provided args were filtered out for security'
+        );
+      }
+
+      args.push(...safeArgs);
+    }
+
     return args;
   }
 
@@ -406,8 +439,8 @@ ${validated.prompt}`;
    */
   private parseCodexOutput(
     output: string,
-    reviewId: string
-  ): ReviewResult {
+    analysisId: string
+  ): AnalysisResult {
     try {
       // Clean output (remove ANSI codes, etc.)
       const cleaned = this.cleanOutput(output);
@@ -457,9 +490,9 @@ ${validated.prompt}`;
       const summary = this.calculateSummary(validated.findings);
 
       // Transform to internal format
-      const result: ReviewResult = {
+      const result: AnalysisResult = {
         success: true,
-        reviewId,
+        analysisId,
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary,
@@ -467,12 +500,12 @@ ${validated.prompt}`;
         overallAssessment: validated.overallAssessment,
         recommendations: validated.recommendations,
         metadata: {
-          reviewDuration: 0,
+          analysisDuration: 0,
         },
       };
 
       // Validate final result
-      ReviewResultSchema.parse(result);
+      AnalysisResultSchema.parse(result);
 
       return result;
     } catch (error) {

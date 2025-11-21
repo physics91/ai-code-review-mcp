@@ -5,13 +5,13 @@
 import { z } from 'zod';
 
 // Common schemas
-export const ReviewFocusSchema = z.enum(['security', 'performance', 'style', 'bugs', 'all']);
+export const AnalysisFocusSchema = z.enum(['security', 'performance', 'style', 'bugs', 'all']);
 
 export const FindingTypeSchema = z.enum(['bug', 'security', 'performance', 'style', 'suggestion']);
 
 export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info']);
 
-export const ReviewFindingSchema = z.object({
+export const AnalysisFindingSchema = z.object({
   type: FindingTypeSchema,
   severity: SeveritySchema,
   line: z.number().nullable(),
@@ -27,7 +27,7 @@ export const ReviewFindingSchema = z.object({
   code: z.string().optional(),
 });
 
-export const ReviewSummarySchema = z.object({
+export const AnalysisSummarySchema = z.object({
   totalFindings: z.number(),
   critical: z.number(),
   high: z.number(),
@@ -35,18 +35,18 @@ export const ReviewSummarySchema = z.object({
   low: z.number(),
 });
 
-export const ReviewMetadataSchema = z.object({
+export const AnalysisMetadataSchema = z.object({
   language: z.string().optional(),
   linesOfCode: z.number().optional(),
-  reviewDuration: z.number(),
+  analysisDuration: z.number(),
 });
 
 /**
- * Create Code Review Params Schema with configurable max prompt length
+ * Create Code Analysis Params Schema with configurable max prompt length
  * Simplified to accept a single prompt parameter instead of structured code/context
  * Enhanced with detailed error messages for better UX
  */
-export function createCodeReviewParamsSchema(maxPromptLength: number = 100000) {
+export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000) {
   return z.object({
     prompt: z
       .string({
@@ -54,25 +54,23 @@ export function createCodeReviewParamsSchema(maxPromptLength: number = 100000) {
         invalid_type_error: 'Prompt must be a string',
       })
       .min(1, {
-        message: 'Prompt cannot be empty - please provide code or instructions to review',
+        message: 'Prompt cannot be empty - please provide code or instructions to analyze',
       })
       .max(maxPromptLength, {
-        message: `Prompt exceeds maximum length of ${maxPromptLength} characters. Consider splitting into smaller reviews or use a more concise prompt.`,
+        message: `Prompt exceeds maximum length of ${maxPromptLength} characters. Consider splitting into smaller analyses or use a more concise prompt.`,
       })
-      .describe('Prompt for code review (can include code, instructions, context, etc.)'),
+      .describe('Prompt for code analysis (can include code, instructions, context, etc.)'),
     options: z
       .object({
         timeout: z
           .number({
             invalid_type_error: 'Timeout must be a number (milliseconds)',
           })
-          .min(1000, {
-            message: 'Timeout must be at least 1000ms (1 second) to allow sufficient execution time',
+          .min(0, {
+            message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
           })
-          .max(300000, {
-            message: 'Timeout cannot exceed 300000ms (5 minutes) to prevent resource exhaustion',
-          })
-          .default(60000),
+          .default(0) // 0 = unlimited
+          .describe('Execution timeout in milliseconds (0 = unlimited)'),
         severity: z
           .enum(['all', 'high', 'medium'], {
             errorMap: () => ({
@@ -95,34 +93,32 @@ export function createCodeReviewParamsSchema(maxPromptLength: number = 100000) {
 }
 
 // Default schema with 100000 max length
-export const CodeReviewParamsSchema = createCodeReviewParamsSchema(100000);
+export const CodeAnalysisParamsSchema = createCodeAnalysisParamsSchema(100000);
 
-export const CombinedReviewInputSchema = z.object({
+export const CombinedAnalysisInputSchema = z.object({
   prompt: z
     .string({
       required_error: 'Prompt is required',
       invalid_type_error: 'Prompt must be a string',
     })
     .min(1, {
-      message: 'Prompt cannot be empty - please provide code or instructions to review',
+      message: 'Prompt cannot be empty - please provide code or instructions to analyze',
     })
     .max(100000, {
-      message: 'Prompt exceeds maximum length of 100000 characters. Consider splitting into smaller reviews.',
+      message: 'Prompt exceeds maximum length of 100000 characters. Consider splitting into smaller analyses.',
     })
-    .describe('Prompt for code review'),
+    .describe('Prompt for code analysis'),
   options: z
     .object({
       timeout: z
         .number({
           invalid_type_error: 'Timeout must be a number (milliseconds)',
         })
-        .min(1000, {
-          message: 'Timeout must be at least 1000ms (1 second)',
+        .min(0, {
+          message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
         })
-        .max(300000, {
-          message: 'Timeout cannot exceed 300000ms (5 minutes)',
-        })
-        .default(120000),
+        .default(0) // 0 = unlimited
+        .describe('Execution timeout in milliseconds (0 = unlimited)'),
       severity: z
         .enum(['all', 'high', 'medium'], {
           errorMap: () => ({
@@ -135,62 +131,62 @@ export const CombinedReviewInputSchema = z.object({
           invalid_type_error: 'parallelExecution must be a boolean (true or false)',
         })
         .default(true)
-        .describe('Run Codex and Gemini reviews in parallel (true) or sequentially (false)'),
-      includeIndividualReviews: z
+        .describe('Run Codex and Gemini analyses in parallel (true) or sequentially (false)'),
+      includeIndividualAnalyses: z
         .boolean({
-          invalid_type_error: 'includeIndividualReviews must be a boolean (true or false)',
+          invalid_type_error: 'includeIndividualAnalyses must be a boolean (true or false)',
         })
         .default(false)
-        .describe('Include individual review results from Codex and Gemini in the combined output'),
+        .describe('Include individual analysis results from Codex and Gemini in the combined output'),
     })
     .optional(),
 });
 
 // Output schemas
-export const ReviewResultSchema = z.object({
+export const AnalysisResultSchema = z.object({
   success: z.boolean(),
-  reviewId: z.string(),
+  analysisId: z.string(),
   timestamp: z.string(),
   source: z.enum(['codex', 'gemini', 'combined']),
-  summary: ReviewSummarySchema,
-  findings: z.array(ReviewFindingSchema),
+  summary: AnalysisSummarySchema,
+  findings: z.array(AnalysisFindingSchema),
   overallAssessment: z.string(),
   recommendations: z.array(z.string()).optional(),
-  metadata: ReviewMetadataSchema,
+  metadata: AnalysisMetadataSchema,
 });
 
-export const AggregatedFindingSchema = ReviewFindingSchema.extend({
+export const AggregatedFindingSchema = AnalysisFindingSchema.extend({
   sources: z.array(z.enum(['codex', 'gemini'])),
   confidence: z.enum(['high', 'medium', 'low']),
 });
 
-export const AggregatedReviewSchema = z.object({
+export const AggregatedAnalysisSchema = z.object({
   success: z.boolean(),
-  reviewId: z.string(),
+  analysisId: z.string(),
   timestamp: z.string(),
   source: z.literal('combined'),
-  summary: ReviewSummarySchema.extend({
+  summary: AnalysisSummarySchema.extend({
     consensus: z.number().min(0).max(100),
   }),
   findings: z.array(AggregatedFindingSchema),
   overallAssessment: z.string(),
   recommendations: z.array(z.string()).optional(),
-  individualReviews: z
+  individualAnalyses: z
     .object({
-      codex: ReviewResultSchema.optional(),
-      gemini: ReviewResultSchema.optional(),
+      codex: AnalysisResultSchema.optional(),
+      gemini: AnalysisResultSchema.optional(),
     })
     .optional(),
-  metadata: ReviewMetadataSchema.extend({
+  metadata: AnalysisMetadataSchema.extend({
     codexDuration: z.number().optional(),
     geminiDuration: z.number().optional(),
   }),
 });
 
 // Type exports
-export type CodeReviewParams = z.infer<typeof CodeReviewParamsSchema>;
-export type CombinedReviewInput = z.infer<typeof CombinedReviewInputSchema>;
-export type ReviewResult = z.infer<typeof ReviewResultSchema>;
-export type AggregatedReview = z.infer<typeof AggregatedReviewSchema>;
-export type ReviewFinding = z.infer<typeof ReviewFindingSchema>;
+export type CodeAnalysisParams = z.infer<typeof CodeAnalysisParamsSchema>;
+export type CombinedAnalysisInput = z.infer<typeof CombinedAnalysisInputSchema>;
+export type AnalysisResult = z.infer<typeof AnalysisResultSchema>;
+export type AggregatedAnalysis = z.infer<typeof AggregatedAnalysisSchema>;
+export type AnalysisFinding = z.infer<typeof AnalysisFindingSchema>;
 export type AggregatedFinding = z.infer<typeof AggregatedFindingSchema>;

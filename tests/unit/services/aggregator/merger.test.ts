@@ -1,14 +1,14 @@
 /**
- * Unit tests for ReviewAggregator
+ * Unit tests for AnalysisAggregator
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReviewAggregator } from '../../../../src/services/aggregator/merger.js';
+import { AnalysisAggregator } from '../../../../src/services/aggregator/merger.js';
 import { Logger } from '../../../../src/core/logger.js';
-import type { ReviewResult } from '../../../../src/schemas/tools.js';
+import type { AnalysisResult } from '../../../../src/schemas/tools.js';
 
-describe('ReviewAggregator', () => {
-  let aggregator: ReviewAggregator;
+describe('AnalysisAggregator', () => {
+  let aggregator: AnalysisAggregator;
   let mockLogger: Logger;
 
   beforeEach(() => {
@@ -19,7 +19,7 @@ describe('ReviewAggregator', () => {
       error: vi.fn(),
     } as unknown as Logger;
 
-    aggregator = new ReviewAggregator(
+    aggregator = new AnalysisAggregator(
       {
         deduplication: {
           enabled: true,
@@ -30,11 +30,11 @@ describe('ReviewAggregator', () => {
     );
   });
 
-  describe('mergeReviews', () => {
-    it('should merge reviews from multiple sources', () => {
-      const codexReview: ReviewResult = {
+  describe('mergeAnalyses', () => {
+    it('should merge analyses from multiple sources', () => {
+      const codexAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '1',
+        analysisId: '1',
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary: { totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0 },
@@ -48,12 +48,12 @@ describe('ReviewAggregator', () => {
           },
         ],
         overallAssessment: 'Has issues',
-        metadata: { linesOfCode: 10, reviewDuration: 100 },
+        metadata: { linesOfCode: 10, analysisDuration: 100 },
       };
 
-      const geminiReview: ReviewResult = {
+      const geminiAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '2',
+        analysisId: '2',
         timestamp: new Date().toISOString(),
         source: 'gemini',
         summary: { totalFindings: 1, critical: 0, high: 0, medium: 1, low: 0 },
@@ -67,10 +67,10 @@ describe('ReviewAggregator', () => {
           },
         ],
         overallAssessment: 'Some issues',
-        metadata: { linesOfCode: 10, reviewDuration: 150 },
+        metadata: { linesOfCode: 10, analysisDuration: 150 },
       };
 
-      const result = aggregator.mergeReviews([codexReview, geminiReview]);
+      const result = aggregator.mergeAnalyses([codexAnalysis, geminiAnalysis]);
 
       expect(result.success).toBe(true);
       expect(result.source).toBe('combined');
@@ -89,29 +89,29 @@ describe('ReviewAggregator', () => {
         description: 'Variable might be null',
       };
 
-      const codexReview: ReviewResult = {
+      const codexAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '1',
+        analysisId: '1',
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary: { totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0 },
         findings: [finding],
         overallAssessment: 'Has issues',
-        metadata: { linesOfCode: 10, reviewDuration: 100 },
+        metadata: { linesOfCode: 10, analysisDuration: 100 },
       };
 
-      const geminiReview: ReviewResult = {
+      const geminiAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '2',
+        analysisId: '2',
         timestamp: new Date().toISOString(),
         source: 'gemini',
         summary: { totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0 },
         findings: [finding],
         overallAssessment: 'Has issues',
-        metadata: { linesOfCode: 10, reviewDuration: 150 },
+        metadata: { linesOfCode: 10, analysisDuration: 150 },
       };
 
-      const result = aggregator.mergeReviews([codexReview, geminiReview]);
+      const result = aggregator.mergeAnalyses([codexAnalysis, geminiAnalysis]);
 
       expect(result.findings).toHaveLength(1);
       expect(result.findings[0].sources).toContain('codex');
@@ -120,9 +120,9 @@ describe('ReviewAggregator', () => {
     });
 
     it('should calculate consensus correctly', () => {
-      const codexReview: ReviewResult = {
+      const codexAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '1',
+        analysisId: '1',
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary: { totalFindings: 2, critical: 0, high: 2, medium: 0, low: 0 },
@@ -143,12 +143,12 @@ describe('ReviewAggregator', () => {
           },
         ],
         overallAssessment: 'Has issues',
-        metadata: { linesOfCode: 10, reviewDuration: 100 },
+        metadata: { linesOfCode: 10, analysisDuration: 100 },
       };
 
-      const geminiReview: ReviewResult = {
+      const geminiAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '2',
+        analysisId: '2',
         timestamp: new Date().toISOString(),
         source: 'gemini',
         summary: { totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0 },
@@ -162,10 +162,10 @@ describe('ReviewAggregator', () => {
           },
         ],
         overallAssessment: 'Has issues',
-        metadata: { linesOfCode: 10, reviewDuration: 150 },
+        metadata: { linesOfCode: 10, analysisDuration: 150 },
       };
 
-      const result = aggregator.mergeReviews([codexReview, geminiReview]);
+      const result = aggregator.mergeAnalyses([codexAnalysis, geminiAnalysis]);
 
       // One finding agreed upon by both (high confidence)
       // One finding only from Codex (low confidence)
@@ -175,9 +175,9 @@ describe('ReviewAggregator', () => {
     });
 
     it('should sort findings by severity', () => {
-      const codexReview: ReviewResult = {
+      const codexAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '1',
+        analysisId: '1',
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary: { totalFindings: 3, critical: 1, high: 1, medium: 0, low: 1 },
@@ -187,10 +187,10 @@ describe('ReviewAggregator', () => {
           { type: 'security', severity: 'high', line: 3, title: 'High', description: 'High' },
         ],
         overallAssessment: 'Mixed',
-        metadata: { linesOfCode: 10, reviewDuration: 100 },
+        metadata: { linesOfCode: 10, analysisDuration: 100 },
       };
 
-      const result = aggregator.mergeReviews([codexReview]);
+      const result = aggregator.mergeAnalyses([codexAnalysis]);
 
       expect(result.findings[0].severity).toBe('critical');
       expect(result.findings[1].severity).toBe('high');
@@ -198,31 +198,31 @@ describe('ReviewAggregator', () => {
     });
 
     it('should merge recommendations', () => {
-      const codexReview: ReviewResult = {
+      const codexAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '1',
+        analysisId: '1',
         timestamp: new Date().toISOString(),
         source: 'codex',
         summary: { totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0 },
         findings: [],
         overallAssessment: 'Good',
         recommendations: ['Use const instead of var', 'Add error handling'],
-        metadata: { linesOfCode: 10, reviewDuration: 100 },
+        metadata: { linesOfCode: 10, analysisDuration: 100 },
       };
 
-      const geminiReview: ReviewResult = {
+      const geminiAnalysis: AnalysisResult = {
         success: true,
-        reviewId: '2',
+        analysisId: '2',
         timestamp: new Date().toISOString(),
         source: 'gemini',
         summary: { totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0 },
         findings: [],
         overallAssessment: 'Good',
         recommendations: ['Add error handling', 'Use TypeScript'],
-        metadata: { linesOfCode: 10, reviewDuration: 150 },
+        metadata: { linesOfCode: 10, analysisDuration: 150 },
       };
 
-      const result = aggregator.mergeReviews([codexReview, geminiReview]);
+      const result = aggregator.mergeAnalyses([codexAnalysis, geminiAnalysis]);
 
       expect(result.recommendations).toBeDefined();
       expect(result.recommendations!.length).toBeGreaterThan(0);

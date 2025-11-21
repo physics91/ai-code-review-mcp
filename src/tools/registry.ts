@@ -17,41 +17,41 @@ import { ErrorHandler } from '../core/error-handler.js';
 import type { Logger } from '../core/logger.js';
 import { ValidationUtils } from '../core/validation.js';
 import type { ServerConfig } from '../schemas/config.js';
-import type { ReviewResult } from '../schemas/review.js';
+import type { AnalysisResult } from '../schemas/tools.js';
 import {
-  createCodeReviewParamsSchema,
-  CombinedReviewInputSchema,
+  createCodeAnalysisParamsSchema,
+  CombinedAnalysisInputSchema,
 } from '../schemas/tools.js';
-import type { ReviewAggregator } from '../services/aggregator/merger.js';
-import type { CodexReviewService } from '../services/codex/client.js';
-import type { GeminiReviewService } from '../services/gemini/client.js';
-import { ReviewStatusStore } from '../services/review-status/store.js';
+import type { AnalysisAggregator } from '../services/aggregator/merger.js';
+import type { CodexAnalysisService } from '../services/codex/client.js';
+import type { GeminiAnalysisService } from '../services/gemini/client.js';
+import { AnalysisStatusStore } from '../services/analysis-status/store.js';
 
-// Schema for get_review_status input - Enhanced with detailed error messages
-const ReviewStatusInputSchema = z.object({
-  reviewId: z
+// Schema for get_analysis_status input - Enhanced with detailed error messages
+const AnalysisStatusInputSchema = z.object({
+  analysisId: z
     .string({
-      required_error: 'Review ID is required',
-      invalid_type_error: 'Review ID must be a string',
+      required_error: 'Analysis ID is required',
+      invalid_type_error: 'Analysis ID must be a string',
     })
     .min(1, {
-      message: 'Review ID cannot be empty. Expected format: codex-<timestamp>-<hash> or gemini-<timestamp>-<hash>',
+      message: 'Analysis ID cannot be empty. Expected format: codex-<timestamp>-<hash> or gemini-<timestamp>-<hash>',
     })
-    .describe('Review ID to check status for'),
+    .describe('Analysis ID to check status for'),
 });
 
 export interface ToolDependencies {
-  codexService: CodexReviewService | null;
-  geminiService: GeminiReviewService | null;
-  aggregator: ReviewAggregator;
+  codexService: CodexAnalysisService | null;
+  geminiService: GeminiAnalysisService | null;
+  aggregator: AnalysisAggregator;
   logger: Logger;
   config: ServerConfig;
 }
 
 /**
- * Format review result as markdown
+ * Format analysis result as markdown
  */
-function formatReviewAsMarkdown(result: ReviewResult): string {
+function formatAnalysisAsMarkdown(result: AnalysisResult): string {
   const lines: string[] = [];
 
   // Overall Assessment
@@ -114,7 +114,7 @@ function formatReviewAsMarkdown(result: ReviewResult): string {
 
   // Metadata footer
   lines.push('---');
-  lines.push(`*Review ID: ${result.reviewId} | Source: ${result.source}*`);
+  lines.push(`*Analysis ID: ${result.analysisId} | Source: ${result.source}*`);
 
   return lines.join('\n');
 }
@@ -124,7 +124,7 @@ function formatReviewAsMarkdown(result: ReviewResult): string {
  * MAJOR FIX #7: Add concurrency control
  */
 export class ToolRegistry {
-  private reviewStatusStore: ReviewStatusStore;
+  private analysisStatusStore: AnalysisStatusStore;
   private codexQueue: PQueue;
   private geminiQueue: PQueue;
 
@@ -132,7 +132,7 @@ export class ToolRegistry {
     private server: McpServer,
     private dependencies: ToolDependencies
   ) {
-    this.reviewStatusStore = ReviewStatusStore.getInstance();
+    this.analysisStatusStore = AnalysisStatusStore.getInstance();
 
     // MAJOR FIX #7: Initialize queues for concurrency control
     this.codexQueue = new PQueue({
@@ -149,69 +149,69 @@ export class ToolRegistry {
    */
   registerTools(): void {
     const { logger, codexService, geminiService } = this.dependencies;
-    const maxCodeLength = this.dependencies.config.review.maxCodeLength;
+    const maxCodeLength = this.dependencies.config.analysis.maxCodeLength;
 
-    // Register Codex review tool if enabled
+    // Register Codex analysis tool if enabled
     if (codexService) {
-      const reviewParamsSchema = createCodeReviewParamsSchema(maxCodeLength);
+      const analysisParamsSchema = createCodeAnalysisParamsSchema(maxCodeLength);
       this.server.registerTool(
-        'review_code_with_codex',
+        'analyze_code_with_codex',
         {
-          title: 'Review Code with Codex',
-          description: 'Perform comprehensive code review using Codex AI',
-          inputSchema: reviewParamsSchema.shape,
+          title: 'Analyze Code with Codex',
+          description: 'Perform comprehensive code analysis using Codex AI',
+          inputSchema: analysisParamsSchema.shape,
         },
         async (args) => {
-          logger.info({ tool: 'review_code_with_codex' }, 'Tool called');
-          return await this.handleCodexReview(args);
+          logger.info({ tool: 'analyze_code_with_codex' }, 'Tool called');
+          return await this.handleCodexAnalysis(args);
         }
       );
     }
 
-    // Register Gemini review tool if enabled
+    // Register Gemini analysis tool if enabled
     if (geminiService) {
-      const reviewParamsSchema = createCodeReviewParamsSchema(maxCodeLength);
+      const analysisParamsSchema = createCodeAnalysisParamsSchema(maxCodeLength);
       this.server.registerTool(
-        'review_code_with_gemini',
+        'analyze_code_with_gemini',
         {
-          title: 'Review Code with Gemini',
-          description: 'Perform comprehensive code review using Gemini CLI',
-          inputSchema: reviewParamsSchema.shape,
+          title: 'Analyze Code with Gemini',
+          description: 'Perform comprehensive code analysis using Gemini CLI',
+          inputSchema: analysisParamsSchema.shape,
         },
         async (args) => {
-          logger.info({ tool: 'review_code_with_gemini' }, 'Tool called');
-          return await this.handleGeminiReview(args);
+          logger.info({ tool: 'analyze_code_with_gemini' }, 'Tool called');
+          return await this.handleGeminiAnalysis(args);
         }
       );
     }
 
-    // Register combined review tool if both services are enabled
+    // Register combined analysis tool if both services are enabled
     if (codexService && geminiService) {
       this.server.registerTool(
-        'review_code_combined',
+        'analyze_code_combined',
         {
-          title: 'Review Code Combined',
-          description: 'Perform code review using both Codex and Gemini, then aggregate results',
-          inputSchema: CombinedReviewInputSchema.shape,
+          title: 'Analyze Code Combined',
+          description: 'Perform code analysis using both Codex and Gemini, then aggregate results',
+          inputSchema: CombinedAnalysisInputSchema.shape,
         },
         async (args) => {
-          logger.info({ tool: 'review_code_combined' }, 'Tool called');
-          return await this.handleCombinedReview(args);
+          logger.info({ tool: 'analyze_code_combined' }, 'Tool called');
+          return await this.handleCombinedAnalysis(args);
         }
       );
     }
 
-    // Register review status tool (always available)
+    // Register analysis status tool (always available)
     this.server.registerTool(
-      'get_review_status',
+      'get_analysis_status',
       {
-        title: 'Get Review Status',
-        description: 'Get the status of an async code review by review ID',
-        inputSchema: ReviewStatusInputSchema.shape,
+        title: 'Get Analysis Status',
+        description: 'Get the status of an async code analysis by analysis ID',
+        inputSchema: AnalysisStatusInputSchema.shape,
       },
       async (args) => {
-        logger.info({ tool: 'get_review_status' }, 'Tool called');
-        return await this.handleGetReviewStatus(args);
+        logger.info({ tool: 'get_analysis_status' }, 'Tool called');
+        return await this.handleGetAnalysisStatus(args);
       }
     );
 
@@ -219,14 +219,14 @@ export class ToolRegistry {
   }
 
   /**
-   * Handle Codex review tool
-   * CRITICAL FIX #3: Wire review status store operations
+   * Handle Codex analysis tool
+   * CRITICAL FIX #3: Wire analysis status store operations
    * CRITICAL FIX #4: Allow per-request maxCodeLength override
    * MAJOR FIX #6: Honor per-request timeout option
    * MAJOR FIX #7: Use queue for concurrency control
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleCodexReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }>}> {
+  private async handleCodexAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }>}> {
     const { codexService, config, logger } = this.dependencies;
 
     if (!codexService) {
@@ -235,51 +235,51 @@ export class ToolRegistry {
 
     // CRITICAL FIX #4: Allow per-request maxCodeLength override via validation
     // The schema itself still uses config default, but we validate against it
-    const maxCodeLength = (args as any).maxCodeLength ?? config.review.maxCodeLength;
-    const schema = createCodeReviewParamsSchema(maxCodeLength);
+    const maxCodeLength = (args as any).maxCodeLength ?? config.analysis.maxCodeLength;
+    const schema = createCodeAnalysisParamsSchema(maxCodeLength);
 
     // ENHANCEMENT: Validate with detailed error messages
-    const params = ValidationUtils.validateOrThrow(schema, args, 'review_code_with_codex');
+    const params = ValidationUtils.validateOrThrow(schema, args, 'analyze_code_with_codex');
 
     // ENHANCEMENT: Sanitize and warn about modifications
     const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
     if (warnings.length > 0) {
-      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+      logger.warn({ warnings, analysisId: 'pre-validation' }, 'Input sanitization performed');
     }
 
     // Use sanitized params
     const finalParams = sanitized;
 
-    // Queue the review to control concurrency
+    // Queue the analysis to control concurrency
     const result = await this.codexQueue.add(async () => {
-      // CRITICAL FIX #3: Generate reviewId FIRST, create status entry BEFORE calling service
-      const reviewId = `codex-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      this.reviewStatusStore.create(reviewId, 'codex');
-      this.reviewStatusStore.updateStatus(reviewId, 'in_progress');
+      // CRITICAL FIX #3: Generate analysisId FIRST, create status entry BEFORE calling service
+      const analysisId = `codex-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      this.analysisStatusStore.create(analysisId, 'codex');
+      this.analysisStatusStore.updateStatus(analysisId, 'in_progress');
 
       try {
-        const result = await codexService.reviewCode(finalParams);
+        const result = await codexService.analyzeCode(finalParams);
 
-        // Override the generated reviewId with our tracked one
-        result.reviewId = reviewId;
+        // Override the generated analysisId with our tracked one
+        result.analysisId = analysisId;
 
         // CRITICAL FIX #3: Store result on success
-        this.reviewStatusStore.setResult(reviewId, result);
+        this.analysisStatusStore.setResult(analysisId, result);
 
-        logger.info({ reviewId }, 'Codex review completed successfully');
+        logger.info({ analysisId }, 'Codex analysis completed successfully');
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: formatReviewAsMarkdown(result),
+              text: formatAnalysisAsMarkdown(result),
             },
           ],
         };
       } catch (error) {
-        // CRITICAL FIX #3: Store error on failure (reviewId always exists now)
+        // CRITICAL FIX #3: Store error on failure (analysisId always exists now)
         const errorInfo = ErrorHandler.classifyError(error);
-        this.reviewStatusStore.setError(reviewId, {
+        this.analysisStatusStore.setError(analysisId, {
           code: errorInfo.code,
           message: errorInfo.message,
         });
@@ -289,21 +289,21 @@ export class ToolRegistry {
     });
 
     if (!result) {
-      throw new Error('Codex review queue returned void');
+      throw new Error('Codex analysis queue returned void');
     }
 
     return result;
   }
 
   /**
-   * Handle Gemini review tool
-   * CRITICAL FIX #3: Wire review status store operations
+   * Handle Gemini analysis tool
+   * CRITICAL FIX #3: Wire analysis status store operations
    * CRITICAL FIX #4: Allow per-request maxCodeLength override
    * MAJOR FIX #6: Honor per-request timeout and cliPath options
    * MAJOR FIX #7: Use queue for concurrency control
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleGeminiReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private async handleGeminiAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { geminiService, config, logger } = this.dependencies;
 
     if (!geminiService) {
@@ -311,51 +311,51 @@ export class ToolRegistry {
     }
 
     // CRITICAL FIX #4: Allow per-request maxCodeLength override
-    const maxCodeLength = (args as any).maxCodeLength ?? config.review.maxCodeLength;
-    const schema = createCodeReviewParamsSchema(maxCodeLength);
+    const maxCodeLength = (args as any).maxCodeLength ?? config.analysis.maxCodeLength;
+    const schema = createCodeAnalysisParamsSchema(maxCodeLength);
 
     // ENHANCEMENT: Validate with detailed error messages
-    const params = ValidationUtils.validateOrThrow(schema, args, 'review_code_with_gemini');
+    const params = ValidationUtils.validateOrThrow(schema, args, 'analyze_code_with_gemini');
 
     // ENHANCEMENT: Sanitize and warn about modifications
     const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
     if (warnings.length > 0) {
-      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+      logger.warn({ warnings, analysisId: 'pre-validation' }, 'Input sanitization performed');
     }
 
     // Use sanitized params
     const finalParams = sanitized;
 
-    // Queue the review to control concurrency
+    // Queue the analysis to control concurrency
     const result = await this.geminiQueue.add(async () => {
-      // CRITICAL FIX #3: Generate reviewId FIRST, create status entry BEFORE calling service
-      const reviewId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      this.reviewStatusStore.create(reviewId, 'gemini');
-      this.reviewStatusStore.updateStatus(reviewId, 'in_progress');
+      // CRITICAL FIX #3: Generate analysisId FIRST, create status entry BEFORE calling service
+      const analysisId = `gemini-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      this.analysisStatusStore.create(analysisId, 'gemini');
+      this.analysisStatusStore.updateStatus(analysisId, 'in_progress');
 
       try {
-        const result = await geminiService.reviewCode(finalParams);
+        const result = await geminiService.analyzeCode(finalParams);
 
-        // Override the generated reviewId with our tracked one
-        result.reviewId = reviewId;
+        // Override the generated analysisId with our tracked one
+        result.analysisId = analysisId;
 
         // CRITICAL FIX #3: Store result on success
-        this.reviewStatusStore.setResult(reviewId, result);
+        this.analysisStatusStore.setResult(analysisId, result);
 
-        logger.info({ reviewId }, 'Gemini review completed successfully');
+        logger.info({ analysisId }, 'Gemini analysis completed successfully');
 
         return {
           content: [
             {
               type: 'text' as const,
-              text: formatReviewAsMarkdown(result),
+              text: formatAnalysisAsMarkdown(result),
             },
           ],
         };
       } catch (error) {
-        // CRITICAL FIX #3: Store error on failure (reviewId always exists now)
+        // CRITICAL FIX #3: Store error on failure (analysisId always exists now)
         const errorInfo = ErrorHandler.classifyError(error);
-        this.reviewStatusStore.setError(reviewId, {
+        this.analysisStatusStore.setError(analysisId, {
           code: errorInfo.code,
           message: errorInfo.message,
         });
@@ -365,93 +365,93 @@ export class ToolRegistry {
     });
 
     if (!result) {
-      throw new Error('Gemini review queue returned void');
+      throw new Error('Gemini analysis queue returned void');
     }
 
     return result;
   }
 
   /**
-   * Handle combined review tool
-   * CRITICAL FIX #3: Wire review status store operations
+   * Handle combined analysis tool
+   * CRITICAL FIX #3: Wire analysis status store operations
    * MAJOR FIX #6: Honor all per-request options
    * MAJOR FIX #7: Respect parallelExecution flag for concurrency
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleCombinedReview(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private async handleCombinedAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { codexService, geminiService, aggregator, logger } = this.dependencies;
 
     if (!codexService || !geminiService) {
-      throw new Error('Both Codex and Gemini services must be enabled for combined review');
+      throw new Error('Both Codex and Gemini services must be enabled for combined analysis');
     }
 
     // ENHANCEMENT: Validate input with detailed error messages
-    const params = ValidationUtils.validateOrThrow(CombinedReviewInputSchema, args, 'review_code_combined');
+    const params = ValidationUtils.validateOrThrow(CombinedAnalysisInputSchema, args, 'analyze_code_combined');
 
     // ENHANCEMENT: Sanitize and warn about modifications
     const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
     if (warnings.length > 0) {
-      logger.warn({ warnings, reviewId: 'pre-validation' }, 'Input sanitization performed');
+      logger.warn({ warnings, analysisId: 'pre-validation' }, 'Input sanitization performed');
     }
 
     // Use sanitized params
     const finalParams = sanitized;
 
     const parallelExecution = finalParams.options?.parallelExecution ?? true;
-    const includeIndividualReviews = finalParams.options?.includeIndividualReviews ?? false;
+    const includeIndividualAnalyses = finalParams.options?.includeIndividualAnalyses ?? false;
 
-    // CRITICAL FIX #3: Create combined review status entry
-    const reviewId = `combined-${Date.now()}`;
-    this.reviewStatusStore.create(reviewId, 'combined');
-    this.reviewStatusStore.updateStatus(reviewId, 'in_progress');
+    // CRITICAL FIX #3: Create combined analysis status entry
+    const analysisId = `combined-${Date.now()}`;
+    this.analysisStatusStore.create(analysisId, 'combined');
+    this.analysisStatusStore.updateStatus(analysisId, 'in_progress');
 
     logger.info(
-      { parallelExecution, includeIndividualReviews, reviewId },
-      'Starting combined review'
+      { parallelExecution, includeIndividualAnalyses, analysisId },
+      'Starting combined analysis'
     );
 
     try {
-      // Execute reviews (parallel or sequential based on option)
-      const reviews = parallelExecution
+      // Execute analyses (parallel or sequential based on option)
+      const analyses = parallelExecution
         ? await Promise.all([
-            this.codexQueue.add(() => codexService.reviewCode(finalParams)),
-            this.geminiQueue.add(() => geminiService.reviewCode(finalParams)),
+            this.codexQueue.add(() => codexService.analyzeCode(finalParams)),
+            this.geminiQueue.add(() => geminiService.analyzeCode(finalParams)),
           ])
         : [
-            await this.codexQueue.add(() => codexService.reviewCode(finalParams)),
-            await this.geminiQueue.add(() => geminiService.reviewCode(finalParams)),
+            await this.codexQueue.add(() => codexService.analyzeCode(finalParams)),
+            await this.geminiQueue.add(() => geminiService.analyzeCode(finalParams)),
           ];
 
       // Filter out undefined results (shouldn't happen, but for type safety)
-      const validReviews = reviews.filter((r): r is Exclude<typeof r, void> => r !== undefined);
+      const validAnalyses = analyses.filter((r): r is Exclude<typeof r, void> => r !== undefined);
 
-      if (validReviews.length === 0) {
-        throw new Error('No reviews completed successfully');
+      if (validAnalyses.length === 0) {
+        throw new Error('No analyses completed successfully');
       }
 
       // Aggregate results
-      const aggregated = aggregator.mergeReviews(validReviews, { includeIndividualReviews });
+      const aggregated = aggregator.mergeAnalyses(validAnalyses, { includeIndividualAnalyses });
 
-      // Override review ID with combined ID
-      aggregated.reviewId = reviewId;
+      // Override analysis ID with combined ID
+      aggregated.analysisId = analysisId;
 
       // CRITICAL FIX #3: Store aggregated result
-      this.reviewStatusStore.setResult(reviewId, aggregated as any);
+      this.analysisStatusStore.setResult(analysisId, aggregated as any);
 
-      logger.info({ reviewId }, 'Combined review completed successfully');
+      logger.info({ analysisId }, 'Combined analysis completed successfully');
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: formatReviewAsMarkdown(aggregated as any),
+            text: formatAnalysisAsMarkdown(aggregated as any),
           },
         ],
       };
     } catch (error) {
       // CRITICAL FIX #3: Store error on failure
       const errorInfo = ErrorHandler.classifyError(error);
-      this.reviewStatusStore.setError(reviewId, {
+      this.analysisStatusStore.setError(analysisId, {
         code: errorInfo.code,
         message: errorInfo.message,
       });
@@ -461,19 +461,19 @@ export class ToolRegistry {
   }
 
   /**
-   * Handle get review status tool
+   * Handle get analysis status tool
    * CRITICAL FIX #3: Properly retrieve and return status
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleGetReviewStatus(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private async handleGetAnalysisStatus(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     // ENHANCEMENT: Validate input with detailed error messages
-    const params = ValidationUtils.validateOrThrow(ReviewStatusInputSchema, args, 'get_review_status');
+    const params = ValidationUtils.validateOrThrow(AnalysisStatusInputSchema, args, 'get_analysis_status');
 
     // Get status from store
-    const status = this.reviewStatusStore.get(params.reviewId);
+    const status = this.analysisStatusStore.get(params.analysisId);
 
     if (!status) {
-      throw new Error(`Review not found: ${params.reviewId}`);
+      throw new Error(`Analysis not found: ${params.analysisId}`);
     }
 
     return {

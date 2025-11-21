@@ -1,11 +1,11 @@
 {
-  "name": "code-review-mcp",
-  "version": "1.0.13",
-  "description": "MCP server for AI-powered code review using Codex and Gemini",
+  "name": "ai-code-agent-mcp",
+  "version": "1.0.1",
+  "description": "MCP server for AI-powered code analysis using Codex and Gemini",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "code-review-mcp": "dist/index.js"
+    "ai-code-agent-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsup",
@@ -26,12 +26,13 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "code-review",
+    "code-analysis",
     "ai",
     "codex",
     "gemini",
     "static-analysis",
-    "code-quality"
+    "code-quality",
+    "ai-agent"
   ],
   "author": "physics91",
   "license": "MIT",

@@ -1,12 +1,12 @@
 /**
- * Review Aggregator
- * Merges and deduplicates reviews from multiple sources
+ * Analysis Aggregator
+ * Merges and deduplicates analyses from multiple sources
  */
 
 import type { Logger } from '../../core/logger.js';
 import { generateUUID } from '../../core/utils.js';
-import type { ReviewResult, AggregatedReview, AggregatedFinding } from '../../schemas/tools.js';
-import type { ReviewFinding, Severity, Confidence } from '../../types/index.js';
+import type { AnalysisResult, AggregatedAnalysis, AggregatedFinding } from '../../schemas/tools.js';
+import type { AnalysisFinding, Severity, Confidence } from '../../types/index.js';
 
 export interface AggregatorConfig {
   deduplication?: {
@@ -15,14 +15,14 @@ export interface AggregatorConfig {
   };
 }
 
-interface FindingWithSource extends ReviewFinding {
+interface FindingWithSource extends AnalysisFinding {
   source: 'codex' | 'gemini';
 }
 
 /**
- * Review Aggregator
+ * Analysis Aggregator
  */
-export class ReviewAggregator {
+export class AnalysisAggregator {
   constructor(
     private config: AggregatorConfig,
     private logger: Logger
@@ -31,13 +31,13 @@ export class ReviewAggregator {
   /**
    * Merge reviews from multiple sources
    */
-  mergeReviews(
-    reviews: ReviewResult[],
-    options?: { includeIndividualReviews?: boolean }
-  ): AggregatedReview {
+  mergeAnalyses(
+    reviews: AnalysisResult[],
+    options?: { includeIndividualAnalyses?: boolean }
+  ): AggregatedAnalysis {
     const startTime = Date.now();
 
-    this.logger.info({ reviewCount: reviews.length }, 'Merging reviews');
+    this.logger.info({ analysisCount: reviews.length }, 'Merging reviews');
 
     // Collect all findings with source information
     const allFindings: FindingWithSource[] = reviews.flatMap((review) =>
@@ -75,7 +75,7 @@ export class ReviewAggregator {
       'Reviews merged'
     );
 
-    const result: AggregatedReview = {
+    const result: AggregatedAnalysis = {
       success: true,
       reviewId: generateUUID(),
       timestamp: new Date().toISOString(),
@@ -87,15 +87,15 @@ export class ReviewAggregator {
       metadata: {
         language: reviews[0]?.metadata.language,
         linesOfCode: reviews[0]?.metadata.linesOfCode || 0,
-        reviewDuration: duration,
-        codexDuration: reviews.find((r) => r.source === 'codex')?.metadata.reviewDuration,
-        geminiDuration: reviews.find((r) => r.source === 'gemini')?.metadata.reviewDuration,
+        analysisDuration: duration,
+        codexDuration: reviews.find((r) => r.source === 'codex')?.metadata.analysisDuration,
+        geminiDuration: reviews.find((r) => r.source === 'gemini')?.metadata.analysisDuration,
       },
     };
 
     // Include individual reviews if requested
-    if (options?.includeIndividualReviews) {
-      result.individualReviews = {
+    if (options?.includeIndividualAnalyses) {
+      result.individualAnalyses = {
         codex: reviews.find((r) => r.source === 'codex'),
         gemini: reviews.find((r) => r.source === 'gemini'),
       };
@@ -167,7 +167,7 @@ export class ReviewAggregator {
   /**
    * Calculate similarity between two findings
    */
-  private calculateSimilarity(a: ReviewFinding, b: ReviewFinding): number {
+  private calculateSimilarity(a: AnalysisFinding, b: AnalysisFinding): number {
     // Check if same line
     const sameLine = a.line !== null && b.line !== null && a.line === b.line;
     if (sameLine) {
@@ -284,7 +284,7 @@ export class ReviewAggregator {
    * Generate overall assessment from multiple reviews
    */
   private generateOverallAssessment(
-    reviews: ReviewResult[],
+    reviews: AnalysisResult[],
     findings: AggregatedFinding[]
   ): string {
     const critical = findings.filter((f) => f.severity === 'critical').length;
@@ -316,7 +316,7 @@ export class ReviewAggregator {
   /**
    * Merge recommendations from multiple reviews
    */
-  private mergeRecommendations(reviews: ReviewResult[]): string[] {
+  private mergeRecommendations(reviews: AnalysisResult[]): string[] {
     const allRecommendations = reviews
       .flatMap((r) => r.recommendations || [])
       .filter(Boolean);
