@@ -9,7 +9,7 @@ This document summarizes the complete implementation of the Code Review MCP Serv
 
 ### Architecture Compliance
 - [x] Follows ../../reference/architecture.md specifications exactly
-- [x] Implements ../../reference/SPECIFICATIONS.md requirements
+- [x] Implements ../../reference/specifications.md requirements
 - [x] Follows ../../guides/implementation-guide.md phases
 - [x] TDD approach with tests written alongside implementation
 
@@ -219,7 +219,7 @@ code-review-mcp/
 +-- config/
 |   +-- default.json              # Default configuration
 +-- ../../reference/architecture.md               # Architecture documentation
-+-- ../../reference/SPECIFICATIONS.md             # Technical specifications
++-- ../../reference/specifications.md             # Technical specifications
 +-- ../../guides/implementation-guide.md       # Implementation guide
 +-- IMPLEMENTATION_STATUS.md      # This file
 +-- README.md                     # User documentation

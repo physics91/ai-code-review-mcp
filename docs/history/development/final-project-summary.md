@@ -56,7 +56,7 @@ Codex MCP Tool Gemini CLI       Deduplication
 - [x] Researched Codex CLI and Gemini CLI documentation
 - [x] Researched MCP server development best practices
 - [x] Designed comprehensive architecture (../../reference/architecture.md, 800+ lines)
-- [x] Created detailed specifications (../../reference/SPECIFICATIONS.md, 600+ lines)
+- [x] Created detailed specifications (../../reference/specifications.md, 600+ lines)
 - [x] Developed implementation guide (../../guides/implementation-guide.md, 800+ lines)
 
 ### Phase 2: Implementation (TDD)
@@ -164,7 +164,7 @@ code-review-mcp/
 |   +-- default.json       # Default configuration
 +-- Documentation/
 |   +-- ../../reference/architecture.md           # System architecture (800+ lines)
-|   +-- ../../reference/SPECIFICATIONS.md         # Technical specifications (600+ lines)
+|   +-- ../../reference/specifications.md         # Technical specifications (600+ lines)
 |   +-- ../../guides/implementation-guide.md   # Development guide (800+ lines)
 |   +-- FIXES_SUMMARY.md          # Round 1 fixes
 |   +-- ROUND2_FIXES.md           # Round 2 fixes

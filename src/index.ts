@@ -40,13 +40,23 @@ async function main() {
       version: config.server.version,
     });
 
-    // Initialize services
+    // Initialize services with context system configuration
     const codexService = config.codex.enabled
-      ? new CodexAnalysisService(config.codex, logger)
+      ? new CodexAnalysisService({
+          ...config.codex,
+          context: config.context,
+          prompts: config.prompts,
+          warnings: config.warnings,
+        }, logger)
       : null;
 
     const geminiService = config.gemini.enabled
-      ? new GeminiAnalysisService(config.gemini, logger)
+      ? new GeminiAnalysisService({
+          ...config.gemini,
+          context: config.context,
+          prompts: config.prompts,
+          warnings: config.warnings,
+        }, logger)
       : null;
 
     const aggregator = new AnalysisAggregator(config.analysis, logger);

@@ -11,7 +11,7 @@ Welcome to the AI Code Review MCP Server documentation. This directory contains 
 ### For Developers
 - **[Implementation Guide](guides/implementation-guide.md)** - Step-by-step implementation instructions
 - **[Architecture](reference/architecture.md)** - System architecture and design patterns
-- **[Specifications](reference/SPECIFICATIONS.md)** - Detailed technical specifications
+- **[Specifications](reference/specifications.md)** - Detailed technical specifications
 
 ### For Contributors
 - **[Development History](history/development/)** - Implementation status and fix summaries
@@ -28,7 +28,7 @@ docs/
 |   \-- project-summary.md              # Project overview
 |-- reference/                          # Technical reference
 |   |-- architecture.md                 # System architecture
-|   \-- SPECIFICATIONS.md               # Technical specifications
+|   \-- specifications.md               # Technical specifications
 \-- history/                            # Development history
     |-- migration/                      # CLI migration docs
     |   |-- cli-auto-detection.md       # Auto-detection implementation
@@ -54,7 +54,7 @@ Start here:
 Start here:
 1. [Architecture](reference/architecture.md) - Understand the system design
 2. [Implementation Guide](guides/implementation-guide.md) - Follow development practices
-3. [Specifications](reference/SPECIFICATIONS.md) - Technical requirements
+3. [Specifications](reference/specifications.md) - Technical requirements
 4. [Development History](history/development/) - Learn from past iterations
 
 ### I want to understand the migration

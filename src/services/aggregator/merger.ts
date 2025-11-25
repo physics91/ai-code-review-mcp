@@ -77,7 +77,7 @@ export class AnalysisAggregator {
 
     const result: AggregatedAnalysis = {
       success: true,
-      reviewId: generateUUID(),
+      analysisId: generateUUID(),
       timestamp: new Date().toISOString(),
       source: 'combined',
       summary,

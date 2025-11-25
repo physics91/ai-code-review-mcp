@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "server": {
     "name": "ai-code-agent-mcp",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "logLevel": "info",
     "transport": "stdio"
   },
@@ -64,5 +64,83 @@
     "enabled": false,
     "ttl": 3600000,
     "maxSize": 100
+  },
+  "secretScanning": {
+    "enabled": true,
+    "patterns": {
+      "aws": true,
+      "gcp": true,
+      "azure": true,
+      "github": true,
+      "generic": true,
+      "database": true,
+      "privateKeys": true
+    },
+    "excludePatterns": [
+      ".*\\.test\\.(ts|js|tsx|jsx)$",
+      ".*\\.spec\\.(ts|js|tsx|jsx)$",
+      ".*__tests__.*",
+      ".*\\.mock\\.(ts|js)$"
+    ]
+  },
+  "context": {
+    "defaults": {
+      "scope": "partial"
+    },
+    "presets": {
+      "react-web": {
+        "threatModel": "web-public",
+        "platform": "cross-platform",
+        "projectType": "web-app",
+        "framework": "react",
+        "language": "typescript",
+        "focus": ["security", "performance"]
+      },
+      "nodejs-api": {
+        "threatModel": "internal-service",
+        "platform": "unix",
+        "projectType": "api",
+        "framework": "express",
+        "language": "typescript",
+        "focus": ["security", "performance"]
+      },
+      "mcp-server": {
+        "threatModel": "local-user-tool",
+        "platform": "cross-platform",
+        "projectType": "mcp-server",
+        "language": "typescript",
+        "focus": ["security", "bugs"]
+      },
+      "cli-tool": {
+        "threatModel": "local-user-tool",
+        "platform": "cross-platform",
+        "projectType": "cli",
+        "language": "typescript",
+        "focus": ["bugs", "style"]
+      },
+      "library": {
+        "threatModel": "library",
+        "platform": "cross-platform",
+        "projectType": "library",
+        "language": "typescript",
+        "scope": "full",
+        "focus": ["bugs", "performance", "style"]
+      }
+    },
+    "activePreset": null,
+    "allowEnvOverride": true,
+    "autoDetect": true
+  },
+  "prompts": {
+    "defaultTemplate": "default",
+    "serviceTemplates": {
+      "codex": "default",
+      "gemini": "default"
+    }
+  },
+  "warnings": {
+    "enabled": true,
+    "showTips": true,
+    "suppressions": []
   }
 }

@@ -36,7 +36,7 @@ describe('MCP Server Integration', () => {
     mockConfig = {
       server: {
         name: 'test-server',
-        version: '1.0.1',
+        version: '1.1.0',
         logLevel: 'info',
         transport: 'stdio',
       },
@@ -93,6 +93,19 @@ describe('MCP Server Integration', () => {
         enabled: false,
         ttl: 3600000,
         maxSize: 100,
+      },
+      secretScanning: {
+        enabled: true,
+        patterns: {
+          aws: true,
+          gcp: true,
+          azure: true,
+          github: true,
+          generic: true,
+          database: true,
+          privateKeys: true,
+        },
+        excludePatterns: [],
       },
     };
 

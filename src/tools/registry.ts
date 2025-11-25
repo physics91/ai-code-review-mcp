@@ -26,6 +26,23 @@ import type { AnalysisAggregator } from '../services/aggregator/merger.js';
 import type { CodexAnalysisService } from '../services/codex/client.js';
 import type { GeminiAnalysisService } from '../services/gemini/client.js';
 import { AnalysisStatusStore } from '../services/analysis-status/store.js';
+import { SecretScanner } from '../services/scanner/secrets.js';
+
+// Schema for scan_secrets input
+const ScanSecretsInputSchema = z.object({
+  code: z
+    .string({
+      required_error: 'Code is required',
+      invalid_type_error: 'Code must be a string',
+    })
+    .min(1, { message: 'Code cannot be empty' })
+    .max(100000, { message: 'Code exceeds maximum length of 100,000 characters' })
+    .describe('Code to scan for secrets'),
+  fileName: z
+    .string()
+    .optional()
+    .describe('Optional file name for context and exclusion matching'),
+});
 
 // Schema for get_analysis_status input - Enhanced with detailed error messages
 const AnalysisStatusInputSchema = z.object({
@@ -46,6 +63,7 @@ export interface ToolDependencies {
   aggregator: AnalysisAggregator;
   logger: Logger;
   config: ServerConfig;
+  secretScanner?: SecretScanner;
 }
 
 /**
@@ -79,6 +97,7 @@ function formatAnalysisAsMarkdown(result: AnalysisResult): string {
         high: '🟠',
         medium: '🟡',
         low: '🔵',
+        info: '⚪',
       }[finding.severity] || '⚪';
 
       lines.push(`### ${index + 1}. ${severityEmoji} ${finding.title}`);
@@ -127,6 +146,7 @@ export class ToolRegistry {
   private analysisStatusStore: AnalysisStatusStore;
   private codexQueue: PQueue;
   private geminiQueue: PQueue;
+  private secretScanner: SecretScanner;
 
   constructor(
     private server: McpServer,
@@ -142,6 +162,16 @@ export class ToolRegistry {
     this.geminiQueue = new PQueue({
       concurrency: dependencies.config.gemini.maxConcurrent,
     });
+
+    // Initialize secret scanner
+    this.secretScanner = dependencies.secretScanner || new SecretScanner(
+      {
+        enabled: dependencies.config.secretScanning.enabled,
+        patterns: dependencies.config.secretScanning.patterns,
+        excludePatterns: dependencies.config.secretScanning.excludePatterns,
+      },
+      dependencies.logger
+    );
   }
 
   /**
@@ -215,6 +245,20 @@ export class ToolRegistry {
       }
     );
 
+    // Register secret scanning tool (always available)
+    this.server.registerTool(
+      'scan_secrets',
+      {
+        title: 'Scan for Secrets',
+        description: 'Scan code for hardcoded secrets, API keys, passwords, and sensitive data',
+        inputSchema: ScanSecretsInputSchema.shape,
+      },
+      async (args) => {
+        logger.info({ tool: 'scan_secrets' }, 'Tool called');
+        return await this.handleScanSecrets(args);
+      }
+    );
+
     logger.info('All tools registered successfully');
   }
 
@@ -262,6 +306,31 @@ export class ToolRegistry {
 
         // Override the generated analysisId with our tracked one
         result.analysisId = analysisId;
+
+        // Integrate secret scanning results
+        if (config.secretScanning?.enabled) {
+          const secretFindings = this.secretScanner.scan(finalParams.prompt);
+          const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+          if (secretAnalysisFindings.length > 0) {
+            // Add secret findings to result
+            result.findings = [...secretAnalysisFindings, ...result.findings];
+
+            // Update summary counts
+            for (const finding of secretAnalysisFindings) {
+              result.summary.totalFindings++;
+              if (finding.severity === 'critical') result.summary.critical++;
+              else if (finding.severity === 'high') result.summary.high++;
+              else if (finding.severity === 'medium') result.summary.medium++;
+              else if (finding.severity === 'low') result.summary.low++;
+            }
+
+            logger.debug(
+              { secretCount: secretAnalysisFindings.length, analysisId },
+              'Secret findings added to analysis'
+            );
+          }
+        }
 
         // CRITICAL FIX #3: Store result on success
         this.analysisStatusStore.setResult(analysisId, result);
@@ -339,6 +408,31 @@ export class ToolRegistry {
         // Override the generated analysisId with our tracked one
         result.analysisId = analysisId;
 
+        // Integrate secret scanning results
+        if (config.secretScanning?.enabled) {
+          const secretFindings = this.secretScanner.scan(finalParams.prompt);
+          const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+          if (secretAnalysisFindings.length > 0) {
+            // Add secret findings to result
+            result.findings = [...secretAnalysisFindings, ...result.findings];
+
+            // Update summary counts
+            for (const finding of secretAnalysisFindings) {
+              result.summary.totalFindings++;
+              if (finding.severity === 'critical') result.summary.critical++;
+              else if (finding.severity === 'high') result.summary.high++;
+              else if (finding.severity === 'medium') result.summary.medium++;
+              else if (finding.severity === 'low') result.summary.low++;
+            }
+
+            logger.debug(
+              { secretCount: secretAnalysisFindings.length, analysisId },
+              'Secret findings added to analysis'
+            );
+          }
+        }
+
         // CRITICAL FIX #3: Store result on success
         this.analysisStatusStore.setResult(analysisId, result);
 
@@ -411,15 +505,30 @@ export class ToolRegistry {
     );
 
     try {
+      // Extract params compatible with individual analysis services
+      // (excludes combined-specific options like parallelExecution, includeIndividualAnalyses)
+      const serviceParams = {
+        prompt: finalParams.prompt,
+        context: finalParams.context,
+        options: finalParams.options ? {
+          timeout: finalParams.options.timeout,
+          severity: finalParams.options.severity,
+          template: finalParams.options.template,
+          preset: finalParams.options.preset,
+          autoDetect: finalParams.options.autoDetect,
+          warnOnMissingContext: finalParams.options.warnOnMissingContext,
+        } : undefined,
+      };
+
       // Execute analyses (parallel or sequential based on option)
       const analyses = parallelExecution
         ? await Promise.all([
-            this.codexQueue.add(() => codexService.analyzeCode(finalParams)),
-            this.geminiQueue.add(() => geminiService.analyzeCode(finalParams)),
+            this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
+            this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
           ])
         : [
-            await this.codexQueue.add(() => codexService.analyzeCode(finalParams)),
-            await this.geminiQueue.add(() => geminiService.analyzeCode(finalParams)),
+            await this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
+            await this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
           ];
 
       // Filter out undefined results (shouldn't happen, but for type safety)
@@ -484,5 +593,155 @@ export class ToolRegistry {
         },
       ],
     };
+  }
+
+  /**
+   * Handle secret scanning tool
+   */
+  private async handleScanSecrets(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+    const { logger } = this.dependencies;
+
+    // Validate input
+    const params = ValidationUtils.validateOrThrow(ScanSecretsInputSchema, args, 'scan_secrets');
+
+    const startTime = Date.now();
+
+    // Perform secret scanning
+    const secretFindings = this.secretScanner.scan(params.code, params.fileName);
+    const analysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+    const duration = Date.now() - startTime;
+
+    // Build result
+    const result = {
+      success: true,
+      scanId: `secrets-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalFindings: secretFindings.length,
+        critical: secretFindings.filter((f) => f.severity === 'critical').length,
+        high: secretFindings.filter((f) => f.severity === 'high').length,
+        medium: secretFindings.filter((f) => f.severity === 'medium').length,
+        low: secretFindings.filter((f) => f.severity === 'low').length,
+        byCategory: this.groupByCategory(secretFindings),
+      },
+      findings: analysisFindings,
+      metadata: {
+        duration,
+        patternsUsed: this.secretScanner.getStats().patternCount,
+        fileName: params.fileName,
+      },
+    };
+
+    logger.info(
+      { scanId: result.scanId, findingCount: result.summary.totalFindings, duration },
+      'Secret scanning completed'
+    );
+
+    // Format as markdown
+    const markdown = this.formatSecretScanAsMarkdown(result);
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: markdown,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Group secret findings by category
+   */
+  private groupByCategory(findings: Array<{ category: string }>): Record<string, number> {
+    const groups: Record<string, number> = {};
+    for (const finding of findings) {
+      groups[finding.category] = (groups[finding.category] || 0) + 1;
+    }
+    return groups;
+  }
+
+  /**
+   * Format secret scan result as markdown
+   */
+  private formatSecretScanAsMarkdown(result: {
+    scanId: string;
+    summary: {
+      totalFindings: number;
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      byCategory: Record<string, number>;
+    };
+    findings: Array<{
+      type: string;
+      severity: string;
+      line: number | null;
+      title: string;
+      description: string;
+      suggestion?: string;
+    }>;
+    metadata: {
+      duration: number;
+      patternsUsed: number;
+      fileName?: string;
+    };
+  }): string {
+    const lines: string[] = [];
+
+    lines.push('# Secret Scan Results\n');
+
+    // Summary
+    if (result.summary.totalFindings === 0) {
+      lines.push('No secrets detected in the code.\n');
+    } else {
+      lines.push('## Summary\n');
+      lines.push(`- **Total Secrets Found:** ${result.summary.totalFindings}`);
+      if (result.summary.critical > 0) lines.push(`- **Critical:** ${result.summary.critical}`);
+      if (result.summary.high > 0) lines.push(`- **High:** ${result.summary.high}`);
+      if (result.summary.medium > 0) lines.push(`- **Medium:** ${result.summary.medium}`);
+      if (result.summary.low > 0) lines.push(`- **Low:** ${result.summary.low}`);
+      lines.push('');
+
+      // By category
+      const categories = Object.entries(result.summary.byCategory);
+      if (categories.length > 0) {
+        lines.push('### By Category\n');
+        for (const [category, count] of categories) {
+          lines.push(`- **${category.replace(/_/g, ' ')}:** ${count}`);
+        }
+        lines.push('');
+      }
+
+      // Findings
+      lines.push('## Findings\n');
+      result.findings.forEach((finding, index) => {
+        const severityEmoji = {
+          critical: '🔴',
+          high: '🟠',
+          medium: '🟡',
+          low: '🔵',
+        }[finding.severity] || '⚪';
+
+        lines.push(`### ${index + 1}. ${severityEmoji} ${finding.title}`);
+        lines.push(`**Severity:** ${finding.severity.toUpperCase()}`);
+        if (finding.line) lines.push(`**Line:** ${finding.line}`);
+        lines.push('');
+        lines.push(finding.description);
+        lines.push('');
+        if (finding.suggestion) {
+          lines.push(`**Recommendation:** ${finding.suggestion}`);
+          lines.push('');
+        }
+      });
+    }
+
+    // Metadata
+    lines.push('---');
+    lines.push(`*Scan ID: ${result.scanId} | Patterns: ${result.metadata.patternsUsed} | Duration: ${result.metadata.duration}ms*`);
+
+    return lines.join('\n');
   }
 }

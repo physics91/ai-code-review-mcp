@@ -4,6 +4,8 @@
 
 import { z } from 'zod';
 
+import { AnalysisContextSchema } from './context.js';
+
 // Common schemas
 export const AnalysisFocusSchema = z.enum(['security', 'performance', 'style', 'bugs', 'all']);
 
@@ -35,10 +37,39 @@ export const AnalysisSummarySchema = z.object({
   low: z.number(),
 });
 
+/**
+ * Context warning schema for missing/incomplete analysis context
+ */
+export const ContextWarningSchema = z.object({
+  code: z.string(),
+  severity: z.enum(['info', 'warning']),
+  message: z.string(),
+  tip: z.string().optional(),
+  field: z.string(),
+});
+
+/**
+ * Resolved context schema for tracking what context was used
+ */
+export const ResolvedContextSchema = z.object({
+  threatModel: z.string().optional(),
+  platform: z.string().optional(),
+  projectType: z.string().optional(),
+  language: z.string().optional(),
+  framework: z.string().optional(),
+  scope: z.string().optional(),
+  fileName: z.string().optional(),
+});
+
 export const AnalysisMetadataSchema = z.object({
   language: z.string().optional(),
   linesOfCode: z.number().optional(),
   analysisDuration: z.number(),
+  // Context-related metadata
+  resolvedContext: ResolvedContextSchema.optional(),
+  warnings: z.array(ContextWarningSchema).optional(),
+  templateUsed: z.string().optional(),
+  autoDetected: z.boolean().optional(),
 });
 
 /**
@@ -60,6 +91,12 @@ export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000)
         message: `Prompt exceeds maximum length of ${maxPromptLength} characters. Consider splitting into smaller analyses or use a more concise prompt.`,
       })
       .describe('Prompt for code analysis (can include code, instructions, context, etc.)'),
+
+    // Analysis context for more accurate findings
+    context: AnalysisContextSchema.optional().describe(
+      'Analysis context (threatModel, platform, projectType, language, framework, scope) for more accurate findings'
+    ),
+
     options: z
       .object({
         timeout: z
@@ -69,7 +106,7 @@ export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000)
           .min(0, {
             message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
           })
-          .default(0) // 0 = unlimited
+          .optional() // 0 = unlimited, defaults handled in service
           .describe('Execution timeout in milliseconds (0 = unlimited)'),
         severity: z
           .enum(['all', 'high', 'medium'], {
@@ -77,7 +114,7 @@ export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000)
               message: "Severity must be one of: 'all' (all findings), 'high' (critical + high), or 'medium' (critical + high + medium)",
             }),
           })
-          .default('all'),
+          .optional(), // defaults to 'all' in service
         cliPath: z
           .string({
             invalid_type_error: 'CLI path must be a string',
@@ -87,6 +124,24 @@ export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000)
           })
           .optional()
           .describe('Custom CLI executable path (must be whitelisted for security)'),
+
+        // New context-related options
+        template: z
+          .string()
+          .optional()
+          .describe('Prompt template ID to use (e.g., default, security-focused)'),
+        preset: z
+          .string()
+          .optional()
+          .describe('Context preset name to apply (e.g., react-web, nodejs-api, mcp-server)'),
+        autoDetect: z
+          .boolean()
+          .optional() // defaults to true in service
+          .describe('Enable auto-detection of language, framework, platform'),
+        warnOnMissingContext: z
+          .boolean()
+          .optional() // defaults to true in service
+          .describe('Show warnings when important context is missing'),
       })
       .optional(),
   });
@@ -108,6 +163,12 @@ export const CombinedAnalysisInputSchema = z.object({
       message: 'Prompt exceeds maximum length of 100000 characters. Consider splitting into smaller analyses.',
     })
     .describe('Prompt for code analysis'),
+
+  // Analysis context for more accurate findings
+  context: AnalysisContextSchema.optional().describe(
+    'Analysis context (threatModel, platform, projectType, language, framework, scope) for more accurate findings'
+  ),
+
   options: z
     .object({
       timeout: z
@@ -117,7 +178,7 @@ export const CombinedAnalysisInputSchema = z.object({
         .min(0, {
           message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
         })
-        .default(0) // 0 = unlimited
+        .optional() // 0 = unlimited, defaults handled in service
         .describe('Execution timeout in milliseconds (0 = unlimited)'),
       severity: z
         .enum(['all', 'high', 'medium'], {
@@ -125,19 +186,37 @@ export const CombinedAnalysisInputSchema = z.object({
             message: "Severity must be one of: 'all', 'high', or 'medium'",
           }),
         })
-        .default('all'),
+        .optional(), // defaults to 'all' in service
       parallelExecution: z
         .boolean({
           invalid_type_error: 'parallelExecution must be a boolean (true or false)',
         })
-        .default(true)
+        .optional() // defaults to true in service
         .describe('Run Codex and Gemini analyses in parallel (true) or sequentially (false)'),
       includeIndividualAnalyses: z
         .boolean({
           invalid_type_error: 'includeIndividualAnalyses must be a boolean (true or false)',
         })
-        .default(false)
+        .optional() // defaults to false in service
         .describe('Include individual analysis results from Codex and Gemini in the combined output'),
+
+      // New context-related options
+      template: z
+        .string()
+        .optional()
+        .describe('Prompt template ID to use'),
+      preset: z
+        .string()
+        .optional()
+        .describe('Context preset name to apply'),
+      autoDetect: z
+        .boolean()
+        .optional() // defaults to true in service
+        .describe('Enable auto-detection of language, framework, platform'),
+      warnOnMissingContext: z
+        .boolean()
+        .optional() // defaults to true in service
+        .describe('Show warnings when important context is missing'),
     })
     .optional(),
 });

@@ -1,6 +1,6 @@
 # Code Review MCP Server - Project Summary
 
-> **Note**: This document describes the project structure and deliverables as they existed during development. File references (e.g., `ARCHITECTURE.md`, `SPECIFICATIONS.md`) reflect the pre-reorganization layout. Current documentation is now organized under `docs/` - see [docs/README.md](../README.md) for the current structure.
+> **Note**: This document describes the project structure and deliverables as they existed during development. File references (e.g., `ARCHITECTURE.md`, `specifications.md`) reflect the pre-reorganization layout. Current documentation is now organized under `docs/` - see [docs/README.md](../README.md) for the current structure.
 
 ## Executive Summary
 
@@ -33,7 +33,7 @@ The Code Review MCP Server is a production-ready Model Context Protocol server t
 | Process Execution | execa | Safe child_process wrapper, no shell injection |
 | Testing | Vitest | Fast, modern testing framework |
 
-### 2. Technical Specifications (../reference/SPECIFICATIONS.md)
+### 2. Technical Specifications (../reference/specifications.md)
 
 **Detailed implementation specifications for:**
 
@@ -228,7 +228,7 @@ code-review-mcp/
 +-- .gitignore
 +-- README.md                       # User documentation
 +-- ../reference/architecture.md                 # System architecture
-+-- ../reference/SPECIFICATIONS.md               # Technical specifications
++-- ../reference/specifications.md               # Technical specifications
 +-- ../guides/implementation-guide.md         # Development guide
 +-- ../guides/project-summary.md             # This file
 ```
@@ -360,7 +360,7 @@ code-review-mcp/
    - Security and performance considerations
    - Complete configuration reference
 
-2. **../reference/SPECIFICATIONS.md** (4 major components, 600+ lines)
+2. **../reference/specifications.md** (4 major components, 600+ lines)
    - Detailed service implementations
    - Complete code examples
    - Error handling strategies
@@ -568,6 +568,6 @@ All deliverables are complete and ready for implementation following the Specifi
 ---
 
 **Project Status:** Specification Complete - Ready for Implementation
-**Documentation Version:** 1.0.1
+**Documentation Version:** 1.1.0
 **Last Updated:** 2025-01-17
 **Total Documentation:** 5 comprehensive documents, 3000+ lines

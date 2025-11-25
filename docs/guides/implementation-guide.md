@@ -19,7 +19,7 @@
 
 ## Overview
 
-This document provides a step-by-step guide to implementing the Code Review MCP Server based on the architecture and specifications provided in [architecture.md](../reference/architecture.md) and [SPECIFICATIONS.md](../reference/SPECIFICATIONS.md).
+This document provides a step-by-step guide to implementing the Code Review MCP Server based on the architecture and specifications provided in [architecture.md](../reference/architecture.md) and [specifications.md](../reference/specifications.md).
 
 ## Implementation Phases
 
@@ -82,7 +82,7 @@ import { z } from 'zod';
 export const CodeReviewParamsSchema = z.object({
   code: z.string().min(1).max(50000),
   language: z.string().optional(),
-  // ... (see ../reference/SPECIFICATIONS.md)
+  // ... (see ../reference/specifications.md)
 });
 
 // Step 2: Implement Codex client
@@ -850,12 +850,12 @@ code-review-mcp/
 +-- Dockerfile
 +-- README.md
 +-- ../reference/architecture.md
-+-- ../reference/SPECIFICATIONS.md
++-- ../reference/specifications.md
 +-- ../guides/implementation-guide.md (this file)
 ```
 
 ---
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Last Updated:** 2025-01-17
 **Author:** Technical Architecture Team

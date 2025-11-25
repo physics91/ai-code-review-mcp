@@ -9,7 +9,9 @@ import { resolve } from 'path';
 
 import { execa } from 'execa';
 
+import { ContextAutoDetector } from '../../core/auto-detect.js';
 import { detectCodexCLIPath } from '../../core/cli-detector.js';
+import { ContextManager, type ContextConfig } from '../../core/context-manager.js';
 import {
   CLIExecutionError,
   TimeoutError,
@@ -20,8 +22,11 @@ import {
   CodexParseError,
 } from '../../core/error-handler.js';
 import { type Logger } from '../../core/logger.js';
+import { PromptTemplateEngine, DEFAULT_FORMAT_INSTRUCTIONS, type TemplateEngineConfig } from '../../core/prompt-template.js';
 import { RetryManager } from '../../core/retry.js';
 import { generateUUID, sanitizeParams } from '../../core/utils.js';
+import { WarningSystem, type WarningConfig } from '../../core/warnings.js';
+import type { AnalysisContext } from '../../schemas/context.js';
 import { CodexResponseSchema, type CodexResponse } from '../../schemas/responses.js';
 import { CodeAnalysisParamsSchema, AnalysisResultSchema, type CodeAnalysisParams, type AnalysisResult } from '../../schemas/tools.js';
 
@@ -34,6 +39,10 @@ export interface CodexServiceConfig {
   search?: boolean;
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
   args?: string[];
+  // Context system configuration
+  context?: ContextConfig;
+  prompts?: TemplateEngineConfig;
+  warnings?: WarningConfig;
 }
 
 /**
@@ -44,6 +53,12 @@ export class CodexAnalysisService {
   private retryManager: RetryManager;
   private allowedCLIPaths: string[];
   private detectedCLIPath: string | null = null;
+
+  // Context system modules
+  private contextManager: ContextManager;
+  private autoDetector: ContextAutoDetector;
+  private warningSystem: WarningSystem;
+  private templateEngine: PromptTemplateEngine;
 
   constructor(
     private config: CodexServiceConfig,
@@ -99,6 +114,34 @@ export class CodexAnalysisService {
         this.logger.warn({ error }, 'Failed to auto-detect Codex CLI path, will use default');
       });
     }
+
+    // Initialize context system modules
+    this.contextManager = new ContextManager({
+      defaults: config.context?.defaults,
+      presets: config.context?.presets,
+      activePreset: config.context?.activePreset,
+      allowEnvOverride: config.context?.allowEnvOverride ?? true,
+      autoDetect: config.context?.autoDetect ?? true,
+    });
+
+    this.autoDetector = new ContextAutoDetector(logger);
+
+    this.warningSystem = new WarningSystem({
+      enabled: config.warnings?.enabled ?? true,
+      showTips: config.warnings?.showTips ?? true,
+      suppressions: config.warnings?.suppressions ?? [],
+    });
+
+    this.templateEngine = new PromptTemplateEngine({
+      templates: config.prompts?.templates,
+      defaultTemplate: config.prompts?.defaultTemplate ?? 'default',
+      serviceTemplates: {
+        codex: config.prompts?.serviceTemplates?.codex ?? 'default',
+        gemini: config.prompts?.serviceTemplates?.gemini,
+      },
+    });
+
+    this.logger.debug('Context system modules initialized for Codex service');
   }
 
   /**
@@ -162,17 +205,46 @@ export class CodexAnalysisService {
       const cliPath = validated.options?.cliPath || this.config.cliPath;
       await this.validateCLIPath(cliPath);
 
-      // Wrap user prompt with JSON format instruction
-      // Put JSON instruction FIRST to ensure Codex doesn't ignore it
-      const prompt = `IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text, no explanations):
-{
-  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
-  "overallAssessment": "string",
-  "recommendations": ["string"]
-}
+      // === Context System Integration ===
+      const enableAutoDetect = validated.options?.autoDetect ?? true;
+      const enableWarnings = validated.options?.warnOnMissingContext ?? true;
 
-Review this code:
-${validated.prompt}`;
+      // Step 1: Auto-detect context if enabled
+      let detectedContext: Partial<AnalysisContext> | undefined;
+      if (enableAutoDetect) {
+        const detection = await this.autoDetector.detect({
+          code: validated.prompt,
+          fileName: validated.context?.fileName,
+          workingDirectory: process.cwd(),
+        });
+        detectedContext = detection.context;
+        this.logger.debug({ detectedContext, sources: detection.sources }, 'Auto-detected context');
+      }
+
+      // Step 2: Resolve final context (priority: defaults -> preset -> detected -> request)
+      // Copy preset from options to context if provided (options.preset takes precedence)
+      const contextWithPreset: AnalysisContext = {
+        ...validated.context,
+        preset: validated.options?.preset || validated.context?.preset,
+      };
+      const resolvedContext = this.contextManager.resolve(contextWithPreset, detectedContext);
+      this.logger.debug({ resolvedContext, preset: contextWithPreset.preset }, 'Resolved analysis context');
+
+      // Step 3: Generate warnings for missing context
+      const warnings = enableWarnings ? this.warningSystem.checkContext(resolvedContext) : [];
+      if (warnings.length > 0) {
+        this.logger.debug({ warnings: warnings.map(w => w.code) }, 'Context warnings generated');
+      }
+
+      // Step 4: Select and render prompt template
+      const templateId = validated.options?.template || this.templateEngine.getTemplateForService('codex');
+      const prompt = this.templateEngine.render(templateId, {
+        prompt: validated.prompt,
+        context: resolvedContext,
+        formatInstructions: DEFAULT_FORMAT_INSTRUCTIONS,
+      });
+
+      this.logger.debug({ templateId, promptLength: prompt.length }, 'Prompt rendered from template');
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
@@ -189,11 +261,29 @@ ${validated.prompt}`;
         review.summary = this.calculateSummary(review.findings);
       }
 
-      // Add metadata
+      // Add metadata including context information
       review.metadata.analysisDuration = Date.now() - startTime;
+      review.metadata.resolvedContext = {
+        threatModel: resolvedContext.threatModel,
+        platform: resolvedContext.platform,
+        projectType: resolvedContext.projectType,
+        language: resolvedContext.language,
+        framework: resolvedContext.framework,
+        scope: resolvedContext.scope,
+        fileName: resolvedContext.fileName,
+      };
+      review.metadata.warnings = this.warningSystem.formatWarningsAsJson(warnings);
+      review.metadata.templateUsed = templateId;
+      review.metadata.autoDetected = enableAutoDetect;
 
       this.logger.info(
-        { analysisId, duration: review.metadata.analysisDuration, findings: review.findings.length },
+        {
+          analysisId,
+          duration: review.metadata.analysisDuration,
+          findings: review.findings.length,
+          warnings: warnings.length,
+          context: resolvedContext.language || 'unknown',
+        },
         'Codex review completed'
       );
 

@@ -3,7 +3,7 @@
  * Provides user-friendly validation error messages for MCP tool inputs
  */
 
-import { ZodError, ZodIssue, type ZodSchema } from 'zod';
+import { ZodError, type ZodIssue, type ZodSchema } from 'zod';
 
 import { ValidationError } from './error-handler.js';
 

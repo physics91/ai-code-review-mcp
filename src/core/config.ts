@@ -82,16 +82,16 @@ export class ConfigManager {
       result.gemini = { ...base.gemini, ...override.gemini } as ServerConfig['gemini'];
     }
 
-    // Merge review
-    if (base.review || override.review) {
-      result.review = {
-        ...base.review,
-        ...override.review,
+    // Merge analysis
+    if (base.analysis || override.analysis) {
+      result.analysis = {
+        ...base.analysis,
+        ...override.analysis,
         deduplication: {
-          ...base.review?.deduplication,
-          ...override.review?.deduplication,
+          ...base.analysis?.deduplication,
+          ...override.analysis?.deduplication,
         },
-      } as ServerConfig['review'];
+      } as ServerConfig['analysis'];
     }
 
     // Merge retry
@@ -114,6 +114,54 @@ export class ConfigManager {
     // Merge cache
     if (base.cache || override.cache) {
       result.cache = { ...base.cache, ...override.cache } as ServerConfig['cache'];
+    }
+
+    // Merge secretScanning
+    if (base.secretScanning || override.secretScanning) {
+      result.secretScanning = {
+        ...base.secretScanning,
+        ...override.secretScanning,
+        patterns: {
+          ...base.secretScanning?.patterns,
+          ...override.secretScanning?.patterns,
+        },
+      } as ServerConfig['secretScanning'];
+    }
+
+    // Merge context
+    if (base.context || override.context) {
+      result.context = {
+        ...base.context,
+        ...override.context,
+        defaults: {
+          ...base.context?.defaults,
+          ...override.context?.defaults,
+        },
+        presets: {
+          ...base.context?.presets,
+          ...override.context?.presets,
+        },
+      } as ServerConfig['context'];
+    }
+
+    // Merge prompts
+    if (base.prompts || override.prompts) {
+      result.prompts = {
+        ...base.prompts,
+        ...override.prompts,
+        serviceTemplates: {
+          ...base.prompts?.serviceTemplates,
+          ...override.prompts?.serviceTemplates,
+        },
+      } as ServerConfig['prompts'];
+    }
+
+    // Merge warnings
+    if (base.warnings || override.warnings) {
+      result.warnings = {
+        ...base.warnings,
+        ...override.warnings,
+      } as ServerConfig['warnings'];
     }
 
     return result;
@@ -180,13 +228,33 @@ export class ConfigManager {
       }
     }
 
-    // Review overrides
-    if (result.review) {
-      if (env.REVIEW_MAX_CODE_LENGTH) {
-        result.review.maxCodeLength = parseInt(env.REVIEW_MAX_CODE_LENGTH, 10);
+    // Analysis overrides
+    if (result.analysis) {
+      if (env.ANALYSIS_MAX_CODE_LENGTH) {
+        result.analysis.maxCodeLength = parseInt(env.ANALYSIS_MAX_CODE_LENGTH, 10);
       }
-      if (env.REVIEW_INCLUDE_CONTEXT !== undefined) {
-        result.review.includeContext = env.REVIEW_INCLUDE_CONTEXT === 'true';
+      if (env.ANALYSIS_INCLUDE_CONTEXT !== undefined) {
+        result.analysis.includeContext = env.ANALYSIS_INCLUDE_CONTEXT === 'true';
+      }
+    }
+
+    // Context overrides
+    if (result.context) {
+      if (env.CONTEXT_AUTO_DETECT !== undefined) {
+        result.context.autoDetect = env.CONTEXT_AUTO_DETECT === 'true';
+      }
+      if (env.CONTEXT_ACTIVE_PRESET) {
+        result.context.activePreset = env.CONTEXT_ACTIVE_PRESET;
+      }
+    }
+
+    // Warnings overrides
+    if (result.warnings) {
+      if (env.WARNINGS_ENABLED !== undefined) {
+        result.warnings.enabled = env.WARNINGS_ENABLED === 'true';
+      }
+      if (env.WARNINGS_SHOW_TIPS !== undefined) {
+        result.warnings.showTips = env.WARNINGS_SHOW_TIPS === 'true';
       }
     }
 

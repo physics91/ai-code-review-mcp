@@ -811,7 +811,7 @@ const sanitizeConfig = (config: any): any => {
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "logLevel": "info",
     "transport": "stdio"
   },
@@ -1245,7 +1245,7 @@ Response:
     "gemini": "available"
   },
   "uptime": 3600,
-  "version": "1.0.1"
+  "version": "1.1.0"
 }
 ```
 
@@ -1309,7 +1309,7 @@ Response:
 
 ## Document Metadata
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Last Updated:** 2025-01-17
 **Status:** Specification
 **Authors:** Technical Architecture Team

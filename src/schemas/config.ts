@@ -4,6 +4,9 @@
 
 import { z } from 'zod';
 
+import { AnalysisContextSchema } from './context.js';
+import { PromptTemplateSchema } from './prompts.js';
+
 export const ServerConfigSchema = z.object({
   server: z.object({
     name: z.string().default('ai-code-agent-mcp'),
@@ -72,6 +75,82 @@ export const ServerConfigSchema = z.object({
     ttl: z.number().min(0).default(3600000),
     maxSize: z.number().min(0).default(100),
   }),
+
+  secretScanning: z.object({
+    enabled: z.boolean().default(true),
+    patterns: z.object({
+      aws: z.boolean().default(true),
+      gcp: z.boolean().default(true),
+      azure: z.boolean().default(true),
+      github: z.boolean().default(true),
+      generic: z.boolean().default(true),
+      database: z.boolean().default(true),
+      privateKeys: z.boolean().default(true),
+    }),
+    excludePatterns: z.array(z.string()).default([
+      '.*\\.test\\.(ts|js|tsx|jsx)$',
+      '.*\\.spec\\.(ts|js|tsx|jsx)$',
+      '.*__tests__.*',
+      '.*\\.mock\\.(ts|js)$',
+    ]),
+  }),
+
+  // Context configuration for analysis
+  context: z
+    .object({
+      defaults: AnalysisContextSchema.optional().describe('Default context applied to all analyses'),
+      presets: z
+        .record(z.string(), AnalysisContextSchema)
+        .optional()
+        .describe('Named context presets (e.g., react-web, nodejs-api)'),
+      activePreset: z
+        .string()
+        .nullable()
+        .default(null)
+        .describe('Active preset name to apply by default'),
+      allowEnvOverride: z
+        .boolean()
+        .default(true)
+        .describe('Allow environment variables to override context'),
+      autoDetect: z
+        .boolean()
+        .default(true)
+        .describe('Enable auto-detection of language, framework, platform'),
+    })
+    .default({}),
+
+  // Prompt template configuration
+  prompts: z
+    .object({
+      templates: z
+        .record(z.string(), PromptTemplateSchema)
+        .optional()
+        .describe('Custom prompt templates'),
+      defaultTemplate: z
+        .string()
+        .default('default')
+        .describe('Default template ID to use'),
+      serviceTemplates: z
+        .object({
+          codex: z.string().optional().describe('Template override for Codex'),
+          gemini: z.string().optional().describe('Template override for Gemini'),
+        })
+        .optional()
+        .describe('Service-specific template overrides'),
+    })
+    .default({}),
+
+  // Warning system configuration
+  warnings: z
+    .object({
+      enabled: z.boolean().default(true).describe('Enable context warnings'),
+      showTips: z.boolean().default(true).describe('Show tips with warnings'),
+      suppressions: z
+        .array(z.string())
+        .default([])
+        .describe('Warning codes to suppress (e.g., MISSING_SCOPE)'),
+    })
+    .default({}),
 });
 
 export type ServerConfig = z.infer<typeof ServerConfigSchema>;

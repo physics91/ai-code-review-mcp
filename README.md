@@ -528,7 +528,7 @@ For faster combined analyses:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `server.name` | string | "ai-code-agent-mcp" | Server name |
-| `server.version` | string | "1.0.1" | Server version |
+| `server.version` | string | "1.1.0" | Server version |
 | `server.logLevel` | string | "info" | Log level (debug/info/warn/error) |
 
 ### Codex Configuration
@@ -705,7 +705,7 @@ For detailed documentation, please refer to:
 
 ### Reference
 - **[Architecture](docs/reference/architecture.md)** - System architecture and design
-- **[Specifications](docs/reference/SPECIFICATIONS.md)** - Technical specifications
+- **[Specifications](docs/reference/specifications.md)** - Technical specifications
 
 ### Development History
 - **[Migration Documentation](docs/history/migration/)** - CLI migration guides
@@ -756,6 +756,6 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Version**: 1.0.1
+**Version**: 1.1.0
 **Last Updated**: 2025-11-21
 **Status**: Production Ready
