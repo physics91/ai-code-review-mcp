@@ -135,6 +135,12 @@ function formatAnalysisAsMarkdown(result: AnalysisResult): string {
   lines.push('---');
   lines.push(`*Analysis ID: ${result.analysisId} | Source: ${result.source}*`);
 
+  // Feedback request message
+  lines.push('');
+  lines.push(
+    '**Do you agree with this analysis?** If you have any objections or additional context, please share your feedback.'
+  );
+
   return lines.join('\n');
 }
 

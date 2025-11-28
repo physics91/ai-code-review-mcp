@@ -74,10 +74,21 @@ export class GeminiAnalysisService {
       logger
     );
 
-    // CRITICAL FIX #5: Derive whitelist from config + environment
-    // This allows per-request cliPath override if it matches allowed paths
+    // Security-hardened whitelist: Only add config.cliPath if it's a known safe pattern
+    // Don't blindly trust config - only allow well-known paths or relative names
+    const isConfigPathSafe = config.cliPath === 'gemini' ||
+                             config.cliPath === 'gemini.cmd' ||
+                             config.cliPath === 'auto' ||
+                             config.cliPath?.startsWith('/usr/local/bin/') ||
+                             config.cliPath?.startsWith('/usr/bin/') ||
+                             config.cliPath?.startsWith('/opt/gemini/') ||
+                             config.cliPath?.startsWith('/opt/homebrew/') ||
+                             config.cliPath?.startsWith('C:\\Program Files\\gemini\\') ||
+                             config.cliPath?.startsWith('C:\\Program Files (x86)\\gemini\\') ||
+                             config.cliPath?.startsWith('C:\\Program Files\\Google\\');
+
     const basePaths = [
-      config.cliPath, // Config CLI path
+      ...(isConfigPathSafe ? [config.cliPath] : []),
       process.env.GEMINI_CLI_PATH, // Environment variable
       '/usr/local/bin/gemini', // Common install location
       '/usr/bin/gemini', // System bin (Unix)
@@ -193,6 +204,10 @@ export class GeminiAnalysisService {
         await this.initializeCLIPath();
       }
 
+      // Validate CLI path BEFORE retry logic (security check shouldn't be retried)
+      const cliPath = validated.options?.cliPath || this.config.cliPath;
+      await this.validateCLIPath(cliPath);
+
       // === Context System Integration ===
       const enableAutoDetect = validated.options?.autoDetect ?? true;
       const enableWarnings = validated.options?.warnOnMissingContext ?? true;
@@ -236,7 +251,7 @@ export class GeminiAnalysisService {
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
-        () => this.executeGeminiCLI(prompt, validated, timeout),
+        () => this.executeGeminiCLI(prompt, timeout, cliPath),
         'Gemini review'
       );
 
@@ -284,6 +299,11 @@ export class GeminiAnalysisService {
         throw error;
       }
 
+      // Re-throw SecurityError without wrapping (important for validation)
+      if (error instanceof SecurityError) {
+        throw error;
+      }
+
       if (error instanceof TimeoutError) {
         throw new GeminiTimeoutError(error.message, analysisId, { cause: error });
       }
@@ -303,15 +323,9 @@ export class GeminiAnalysisService {
 
   /**
    * Execute Gemini CLI command securely
-   * MAJOR FIX #6: Honor per-request cliPath and timeout options
+   * @param cliPath - Pre-validated CLI path (validation done before retry logic)
    */
-  private async executeGeminiCLI(prompt: string, params: CodeAnalysisParams, timeout: number): Promise<string> {
-    // MAJOR FIX #6: Use per-request cliPath if specified, otherwise use config
-    const cliPath = params.options?.cliPath || this.config.cliPath;
-
-    // Validate CLI path (security) - now async to resolve PATH
-    await this.validateCLIPath(cliPath);
-
+  private async executeGeminiCLI(prompt: string, timeout: number, cliPath: string): Promise<string> {
     // Build CLI arguments with model support
     const args = this.buildCLIArgs();
 
@@ -473,35 +487,98 @@ export class GeminiAnalysisService {
     return args;
   }
 
+  // Maximum output size to parse (guard against unexpectedly large responses)
+  private static readonly MAX_PARSE_SIZE = 1024 * 1024; // 1MB
+
   /**
    * Parse Gemini CLI output into structured format
+   * Handles multiple output formats:
+   * - Direct JSON output
+   * - Gemini wrapper format: {"response": "...", "stats": {...}, "error": ...}
+   * - Markdown code blocks in response
+   * - JSONL format (for future compatibility)
    */
   private parseGeminiOutput(
     output: string,
     analysisId: string
   ): AnalysisResult {
     try {
-      // Clean output (remove ANSI codes, etc.)
+      // Guard against unexpectedly large outputs
+      if (output.length > GeminiAnalysisService.MAX_PARSE_SIZE) {
+        this.logger.warn({ analysisId, size: output.length }, 'Gemini output exceeds maximum parse size');
+        throw new ParseError(`Output exceeds maximum parse size of ${GeminiAnalysisService.MAX_PARSE_SIZE} bytes`);
+      }
+
       const cleaned = this.cleanOutput(output);
+      let parsed: unknown;
 
-      // Extract JSON from output
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        this.logger.warn({ output: cleaned.substring(0, 500) }, 'No JSON found in Gemini output');
-        throw new ParseError('No JSON found in Gemini output');
+      this.logger.debug({ analysisId, outputLength: cleaned.length }, 'Starting Gemini output parsing');
+
+      // Step 1: Try to parse entire output as JSON
+      let geminiWrapper: { response?: string | object | null; stats?: object; error?: string | null } | null = null;
+      try {
+        geminiWrapper = JSON.parse(cleaned);
+        this.logger.debug({ analysisId, hasWrapper: true }, 'Parsed Gemini output as JSON');
+      } catch {
+        // Step 2: Try JSONL format (line by line) for future compatibility
+        const lines = cleaned.split('\n').filter(line => line.trim());
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line);
+            // Look for Gemini wrapper format in JSONL
+            if (event.response !== undefined || event.findings !== undefined) {
+              geminiWrapper = event;
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+
+        // Step 3: Fallback - extract JSON using non-greedy regex and iterate
+        if (!geminiWrapper) {
+          geminiWrapper = this.extractFirstValidJson(cleaned, analysisId);
+        }
       }
 
-      let parsed = JSON.parse(jsonMatch[0]);
-
-      // Gemini CLI wraps response in {"response": "...", "stats": {...}}
-      // Extract the actual review JSON from the response field
-      if (parsed.response && typeof parsed.response === 'string') {
-        // Remove markdown code blocks (```json ... ```)
-        const responseText = parsed.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        parsed = JSON.parse(responseText);
+      if (!geminiWrapper) {
+        throw new ParseError('Could not parse Gemini output in any format');
       }
 
-      // Validate response against schema
+      // Step 4: Check for error field in Gemini wrapper
+      if (geminiWrapper.error) {
+        this.logger.error({ analysisId, error: geminiWrapper.error }, 'Gemini CLI returned an error');
+        throw new ParseError(`Gemini CLI error: ${geminiWrapper.error}`);
+      }
+
+      // Step 5: Extract response content
+      // Case A: Direct analysis result (has 'findings' at top level)
+      if ('findings' in geminiWrapper && Array.isArray((geminiWrapper as Record<string, unknown>).findings)) {
+        parsed = geminiWrapper;
+        this.logger.debug({ analysisId }, 'Using direct analysis result format');
+      }
+      // Case B: Gemini wrapper with response field
+      else if (geminiWrapper.response !== undefined) {
+        if (geminiWrapper.response === null) {
+          throw new ParseError('Gemini response is null (no model output)');
+        }
+
+        if (typeof geminiWrapper.response === 'object') {
+          // Response is already a parsed object
+          parsed = geminiWrapper.response;
+          this.logger.debug({ analysisId }, 'Response is already a parsed object');
+        } else if (typeof geminiWrapper.response === 'string') {
+          // Parse string response
+          parsed = this.parseResponseString(geminiWrapper.response, analysisId);
+          this.logger.debug({ analysisId }, 'Parsed response from string');
+        } else {
+          throw new ParseError(`Unexpected response type: ${typeof geminiWrapper.response}`);
+        }
+      } else {
+        throw new ParseError('Invalid Gemini output: missing both findings and response fields');
+      }
+
+      // Step 6: Validate response against schema
       const validated = GeminiResponseSchema.parse(parsed);
 
       // Calculate summary
@@ -525,9 +602,11 @@ export class GeminiAnalysisService {
       // Validate final result
       AnalysisResultSchema.parse(result);
 
+      this.logger.debug({ analysisId, findingsCount: result.findings.length }, 'Gemini output parsed successfully');
+
       return result;
     } catch (error) {
-      this.logger.error({ error, output: output.substring(0, 500) }, 'Failed to parse Gemini output');
+      this.logger.error({ analysisId, error, output: output.substring(0, 500) }, 'Failed to parse Gemini output');
 
       if (error instanceof ParseError) {
         throw error;
@@ -535,6 +614,117 @@ export class GeminiAnalysisService {
 
       throw new ParseError('Failed to parse Gemini output', { cause: error });
     }
+  }
+
+  /**
+   * Extract first valid JSON object from text using non-greedy matching
+   * Iterates over potential matches to avoid greedy capture issues
+   */
+  private extractFirstValidJson(
+    text: string,
+    analysisId: string
+  ): { response?: string | object | null; stats?: object; error?: string | null } | null {
+    // Use non-greedy pattern to find JSON-like segments
+    const jsonCandidates = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+
+    if (!jsonCandidates || jsonCandidates.length === 0) {
+      this.logger.warn({ analysisId, output: text.substring(0, 500) }, 'No JSON candidates found in Gemini output');
+      throw new ParseError('No JSON found in Gemini output');
+    }
+
+    // Try each candidate in order until one parses successfully
+    for (const candidate of jsonCandidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        // Check if it looks like a valid Gemini response
+        if (parsed && typeof parsed === 'object') {
+          if ('response' in parsed || 'findings' in parsed || 'error' in parsed) {
+            return parsed;
+          }
+        }
+      } catch {
+        // This candidate didn't parse, try next
+        continue;
+      }
+    }
+
+    // If no candidate matched the expected format, try the first parseable one
+    for (const candidate of jsonCandidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    // Fall back to greedy extraction as last resort
+    const greedyMatch = text.match(/\{[\s\S]*\}/);
+    if (greedyMatch) {
+      try {
+        return JSON.parse(greedyMatch[0]);
+      } catch (e) {
+        this.logger.warn({ analysisId, match: greedyMatch[0].substring(0, 200), error: e }, 'Failed to parse greedy JSON extraction');
+      }
+    }
+
+    throw new ParseError('Failed to extract valid JSON from Gemini output');
+  }
+
+  /**
+   * Parse response string that may contain JSON with optional markdown code blocks
+   */
+  private parseResponseString(response: string, analysisId: string): unknown {
+    // Remove markdown code blocks with various patterns
+    // Handles: ```json, ``` json, ```JSON, ``` , etc.
+    let responseText = response
+      .replace(/^```(?:json|JSON)?\s*\n?/gm, '')  // Opening code block
+      .replace(/\n?```\s*$/gm, '')                 // Closing code block
+      .trim();
+
+    // Try to parse as JSON directly
+    try {
+      return JSON.parse(responseText);
+    } catch {
+      // Response might have text before/after JSON, try to extract it
+      this.logger.debug({ analysisId }, 'Direct JSON parse failed, attempting to extract JSON object');
+    }
+
+    // Try to find JSON object in the response using non-greedy approach
+    const jsonCandidates = responseText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+    if (jsonCandidates) {
+      for (const candidate of jsonCandidates) {
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    // Fallback to greedy extraction
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        this.logger.warn({ analysisId, extracted: jsonMatch[0].substring(0, 200) }, 'Failed to parse extracted JSON from response');
+      }
+    }
+
+    // Try to find JSON array in the response
+    const arrayMatch = responseText.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      try {
+        return JSON.parse(arrayMatch[0]);
+      } catch {
+        // Continue to error
+      }
+    }
+
+    throw new ParseError('No valid JSON found in Gemini response string');
   }
 
   /**
