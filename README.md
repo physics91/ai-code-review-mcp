@@ -233,7 +233,7 @@ Create a `config.json` in your project or use the default configuration:
 {
   "server": {
     "name": "code-review-mcp",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "logLevel": "info"
   },
   "codex": {
@@ -528,7 +528,7 @@ For faster combined analyses:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `server.name` | string | "ai-code-agent-mcp" | Server name |
-| `server.version` | string | "1.1.2" | Server version |
+| `server.version` | string | "1.1.3" | Server version |
 | `server.logLevel` | string | "info" | Log level (debug/info/warn/error) |
 
 ### Codex Configuration
@@ -756,6 +756,6 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Version**: 1.1.2
+**Version**: 1.1.3
 **Last Updated**: 2025-11-28
 **Status**: Production Ready

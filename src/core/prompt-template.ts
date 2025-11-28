@@ -7,6 +7,33 @@ import type { AnalysisContext } from '../schemas/context.js';
 import type { PromptTemplate, PromptSection } from '../schemas/prompts.js';
 
 /**
+ * Direct codebase analysis instruction for AI
+ * Ensures AI analyzes the provided code directly rather than summarizing
+ */
+export const DIRECT_CODEBASE_ANALYSIS_INSTRUCTION = `CRITICAL: Perform DIRECT CODE ANALYSIS, not a summary.
+
+YOU MUST:
+- Analyze the actual code structure, logic flow, and implementation details
+- Identify specific issues with line numbers when provided
+- Provide concrete, actionable findings based on the ACTUAL code content
+- Focus on issues relevant to a production deployment
+
+DO NOT:
+- Simply describe what the code does at a high level
+- Make assumptions without examining the code
+- Skip analysis of functions, classes, or edge cases`;
+
+/**
+ * Default JSON format instructions for AI responses
+ */
+export const DEFAULT_FORMAT_INSTRUCTIONS = `IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text, no explanations):
+{
+  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
+  "overallAssessment": "string",
+  "recommendations": ["string"]
+}`;
+
+/**
  * Template variables for rendering
  */
 export interface TemplateVariables {
@@ -59,7 +86,9 @@ export class PromptTemplateEngine {
       id: 'default',
       name: 'Default Analysis',
       description: 'Standard code analysis template',
-      template: `{{contextSection}}
+      template: `${DIRECT_CODEBASE_ANALYSIS_INSTRUCTION}
+
+{{contextSection}}
 
 {{formatInstructions}}
 
@@ -73,7 +102,9 @@ Review this code:
       id: 'security-focused',
       name: 'Security Focused Analysis',
       description: 'Template focused on security vulnerabilities',
-      template: `{{contextSection}}
+      template: `${DIRECT_CODEBASE_ANALYSIS_INSTRUCTION}
+
+{{contextSection}}
 
 Focus specifically on security vulnerabilities including:
 - Injection attacks (SQL, Command, XSS, LDAP)
@@ -96,7 +127,9 @@ Review this code for security issues:
       id: 'performance-focused',
       name: 'Performance Focused Analysis',
       description: 'Template focused on performance issues',
-      template: `{{contextSection}}
+      template: `${DIRECT_CODEBASE_ANALYSIS_INSTRUCTION}
+
+{{contextSection}}
 
 Focus specifically on performance issues including:
 - Inefficient algorithms and data structures
@@ -119,7 +152,9 @@ Review this code for performance issues:
       id: 'code-quality',
       name: 'Code Quality Analysis',
       description: 'Template focused on code quality and maintainability',
-      template: `{{contextSection}}
+      template: `${DIRECT_CODEBASE_ANALYSIS_INSTRUCTION}
+
+{{contextSection}}
 
 Focus on code quality and maintainability:
 - Code organization and structure
@@ -349,16 +384,6 @@ This is a LIBRARY meant to be used by other developers.
 export function createTemplateEngine(config: TemplateEngineConfig): PromptTemplateEngine {
   return new PromptTemplateEngine(config);
 }
-
-/**
- * Default JSON format instructions for AI responses
- */
-export const DEFAULT_FORMAT_INSTRUCTIONS = `IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text, no explanations):
-{
-  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
-  "overallAssessment": "string",
-  "recommendations": ["string"]
-}`;
 
 /**
  * Threat model interpretation guidelines for AI
