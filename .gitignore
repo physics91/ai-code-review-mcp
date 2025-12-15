@@ -27,6 +27,10 @@ build/
 coverage/
 .nyc_output/
 *.lcov
+test-data/
+
+# Database
+data/
 
 # Logs
 logs/
