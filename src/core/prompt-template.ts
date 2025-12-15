@@ -63,8 +63,8 @@ export class PromptTemplateEngine {
   private serviceTemplates: { codex?: string; gemini?: string };
 
   constructor(config: TemplateEngineConfig) {
-    this.defaultTemplateId = config.defaultTemplate || 'default';
-    this.serviceTemplates = config.serviceTemplates || {};
+    this.defaultTemplateId = config.defaultTemplate;
+    this.serviceTemplates = config.serviceTemplates ?? {};
 
     // Register built-in templates
     this.registerBuiltInTemplates();
@@ -177,7 +177,7 @@ Review this code for quality issues:
    * Render a template with variables
    */
   render(templateId: string, variables: TemplateVariables): string {
-    const template = this.templates.get(templateId) || this.templates.get(this.defaultTemplateId)!;
+    const template = this.templates.get(templateId) ?? this.templates.get(this.defaultTemplateId)!;
 
     // Build context section
     const contextSection = this.buildContextSection(variables.context);
@@ -244,7 +244,7 @@ Review this code for quality issues:
       return '';
     }
 
-    let result = `Analysis Context:\n${parts.map((p) => `- ${p}`).join('\n')}`;
+    let result = `Analysis Context:\n${parts.map(p => `- ${p}`).join('\n')}`;
 
     // Add threat model guidelines when a threat model is specified
     if (context.threatModel) {
@@ -289,14 +289,17 @@ This is INTERNET-FACING with untrusted input.
 - Rate limiting → HIGH
 - Information disclosure → HIGH`,
 
-      'library': `Severity Guidelines for "${threatModel}":
+      library: `Severity Guidelines for "${threatModel}":
 This is a LIBRARY meant to be used by other developers.
 - Document security assumptions in recommendations
 - Mark "potential" issues rather than definitive vulnerabilities
 - Focus on: API design, type safety, error handling, documentation`,
     };
 
-    return guidelines[threatModel] || `Note: Using threat model "${threatModel}" for severity assessment.`;
+    return (
+      guidelines[threatModel] ??
+      `Note: Using threat model "${threatModel}" for severity assessment.`
+    );
   }
 
   /**
@@ -304,9 +307,9 @@ This is a LIBRARY meant to be used by other developers.
    */
   private evaluateSections(sections: PromptSection[], context: AnalysisContext): string[] {
     return sections
-      .filter((section) => this.evaluateCondition(section.condition, context))
+      .filter(section => this.evaluateCondition(section.condition, context))
       .sort((a, b) => a.priority - b.priority)
-      .map((section) => section.content);
+      .map(section => section.content);
   }
 
   /**
@@ -320,17 +323,21 @@ This is a LIBRARY meant to be used by other developers.
 
     // Match equality: field === 'value'
     const equalMatch = condition.match(/(\w+)\s*===\s*['"]([^'"]+)['"]/);
-    if (equalMatch && equalMatch[1] && equalMatch[2]) {
-      const field = equalMatch[1];
-      const value = equalMatch[2];
+    const equalField = equalMatch?.[1];
+    const equalValue = equalMatch?.[2];
+    if (equalField && equalValue) {
+      const field = equalField;
+      const value = equalValue;
       return (context as Record<string, unknown>)[field] === value;
     }
 
     // Match inequality: field !== 'value'
     const notEqualMatch = condition.match(/(\w+)\s*!==\s*['"]([^'"]+)['"]/);
-    if (notEqualMatch && notEqualMatch[1] && notEqualMatch[2]) {
-      const field = notEqualMatch[1];
-      const value = notEqualMatch[2];
+    const notEqualField = notEqualMatch?.[1];
+    const notEqualValue = notEqualMatch?.[2];
+    if (notEqualField && notEqualValue) {
+      const field = notEqualField;
+      const value = notEqualValue;
       return (context as Record<string, unknown>)[field] !== value;
     }
 
@@ -343,7 +350,7 @@ This is a LIBRARY meant to be used by other developers.
    * Get template for a specific service
    */
   getTemplateForService(service: 'codex' | 'gemini'): string {
-    return this.serviceTemplates[service] || this.defaultTemplateId;
+    return this.serviceTemplates[service] ?? this.defaultTemplateId;
   }
 
   /**

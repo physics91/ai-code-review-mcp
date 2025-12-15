@@ -3,7 +3,7 @@
  * In-memory storage for async analysis tracking
  */
 
-import type { AnalysisResult } from '../../schemas/tools.js';
+import type { AggregatedAnalysis, AnalysisResult } from '../../schemas/tools.js';
 
 export type AnalysisStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
@@ -13,7 +13,7 @@ export interface AnalysisStatusEntry {
   source: 'codex' | 'gemini' | 'combined';
   startTime: string;
   endTime?: string;
-  result?: AnalysisResult;
+  result?: AnalysisResult | AggregatedAnalysis;
   error?: {
     code: string;
     message: string;
@@ -28,9 +28,12 @@ export class AnalysisStatusStore {
   private readonly DEFAULT_TTL_MS = 60 * 60 * 1000;
 
   private constructor() {
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 5 * 60 * 1000);
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanup();
+      },
+      5 * 60 * 1000
+    );
   }
 
   static getInstance(): AnalysisStatusStore {
@@ -79,7 +82,7 @@ export class AnalysisStatusStore {
     }
   }
 
-  setResult(analysisId: string, result: AnalysisResult): void {
+  setResult(analysisId: string, result: AnalysisResult | AggregatedAnalysis): void {
     const entry = this.analyses.get(analysisId);
     if (entry) {
       const now = new Date();

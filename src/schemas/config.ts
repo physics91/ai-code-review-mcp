@@ -10,7 +10,7 @@ import { PromptTemplateSchema } from './prompts.js';
 export const ServerConfigSchema = z.object({
   server: z.object({
     name: z.string().default('ai-code-agent-mcp'),
-    version: z.string().default('1.1.0'),
+    version: z.string().default('1.2.0'),
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     transport: z.enum(['stdio', 'http']).default('stdio'),
   }),
@@ -24,7 +24,7 @@ export const ServerConfigSchema = z.object({
     maxConcurrent: z.number().min(1).max(10).default(1),
     model: z.string().nullable().default('gpt-5'),
     search: z.boolean().default(true),
-    reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).default('high'),
+    reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).default('high'),
     args: z.array(z.string()).default([]),
   }),
 
@@ -56,7 +56,9 @@ export const ServerConfigSchema = z.object({
     initialDelay: z.number().min(0).default(1000),
     maxDelay: z.number().min(0).default(10000),
     backoffFactor: z.number().min(1).default(2),
-    retryableErrors: z.array(z.string()).default(['TIMEOUT_ERROR', 'NETWORK_ERROR', 'CLI_EXECUTION_ERROR']),
+    retryableErrors: z
+      .array(z.string())
+      .default(['TIMEOUT_ERROR', 'NETWORK_ERROR', 'CLI_EXECUTION_ERROR']),
   }),
 
   logging: z.object({
@@ -87,18 +89,22 @@ export const ServerConfigSchema = z.object({
       database: z.boolean().default(true),
       privateKeys: z.boolean().default(true),
     }),
-    excludePatterns: z.array(z.string()).default([
-      '.*\\.test\\.(ts|js|tsx|jsx)$',
-      '.*\\.spec\\.(ts|js|tsx|jsx)$',
-      '.*__tests__.*',
-      '.*\\.mock\\.(ts|js)$',
-    ]),
+    excludePatterns: z
+      .array(z.string())
+      .default([
+        '.*\\.test\\.(ts|js|tsx|jsx)$',
+        '.*\\.spec\\.(ts|js|tsx|jsx)$',
+        '.*__tests__.*',
+        '.*\\.mock\\.(ts|js)$',
+      ]),
   }),
 
   // Context configuration for analysis
   context: z
     .object({
-      defaults: AnalysisContextSchema.optional().describe('Default context applied to all analyses'),
+      defaults: AnalysisContextSchema.optional().describe(
+        'Default context applied to all analyses'
+      ),
       presets: z
         .record(z.string(), AnalysisContextSchema)
         .optional()
@@ -126,10 +132,7 @@ export const ServerConfigSchema = z.object({
         .record(z.string(), PromptTemplateSchema)
         .optional()
         .describe('Custom prompt templates'),
-      defaultTemplate: z
-        .string()
-        .default('default')
-        .describe('Default template ID to use'),
+      defaultTemplate: z.string().default('default').describe('Default template ID to use'),
       serviceTemplates: z
         .object({
           codex: z.string().optional().describe('Template override for Codex'),

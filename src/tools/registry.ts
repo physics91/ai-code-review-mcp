@@ -17,15 +17,16 @@ import { ErrorHandler } from '../core/error-handler.js';
 import type { Logger } from '../core/logger.js';
 import { ValidationUtils } from '../core/validation.js';
 import type { ServerConfig } from '../schemas/config.js';
-import type { AnalysisResult } from '../schemas/tools.js';
 import {
-  createCodeAnalysisParamsSchema,
   CombinedAnalysisInputSchema,
+  createCodeAnalysisParamsSchema,
+  type AggregatedAnalysis,
+  type AnalysisResult,
 } from '../schemas/tools.js';
 import type { AnalysisAggregator } from '../services/aggregator/merger.js';
+import { AnalysisStatusStore } from '../services/analysis-status/store.js';
 import type { CodexAnalysisService } from '../services/codex/client.js';
 import type { GeminiAnalysisService } from '../services/gemini/client.js';
-import { AnalysisStatusStore } from '../services/analysis-status/store.js';
 import { SecretScanner } from '../services/scanner/secrets.js';
 
 // Schema for scan_secrets input
@@ -38,10 +39,7 @@ const ScanSecretsInputSchema = z.object({
     .min(1, { message: 'Code cannot be empty' })
     .max(100000, { message: 'Code exceeds maximum length of 100,000 characters' })
     .describe('Code to scan for secrets'),
-  fileName: z
-    .string()
-    .optional()
-    .describe('Optional file name for context and exclusion matching'),
+  fileName: z.string().optional().describe('Optional file name for context and exclusion matching'),
 });
 
 // Schema for get_analysis_status input - Enhanced with detailed error messages
@@ -52,7 +50,8 @@ const AnalysisStatusInputSchema = z.object({
       invalid_type_error: 'Analysis ID must be a string',
     })
     .min(1, {
-      message: 'Analysis ID cannot be empty. Expected format: codex-<timestamp>-<hash> or gemini-<timestamp>-<hash>',
+      message:
+        'Analysis ID cannot be empty. Expected format: codex-<timestamp>-<hash> or gemini-<timestamp>-<hash>',
     })
     .describe('Analysis ID to check status for'),
 });
@@ -69,7 +68,7 @@ export interface ToolDependencies {
 /**
  * Format analysis result as markdown
  */
-function formatAnalysisAsMarkdown(result: AnalysisResult): string {
+function formatAnalysisAsMarkdown(result: AnalysisResult | AggregatedAnalysis): string {
   const lines: string[] = [];
 
   // Overall Assessment
@@ -92,13 +91,14 @@ function formatAnalysisAsMarkdown(result: AnalysisResult): string {
   if (result.findings.length > 0) {
     lines.push('## Findings\n');
     result.findings.forEach((finding, index) => {
-      const severityEmoji = {
-        critical: '🔴',
-        high: '🟠',
-        medium: '🟡',
-        low: '🔵',
-        info: '⚪',
-      }[finding.severity] || '⚪';
+      const severityEmoji =
+        {
+          critical: '🔴',
+          high: '🟠',
+          medium: '🟡',
+          low: '🔵',
+          info: '⚪',
+        }[finding.severity] ?? '⚪';
 
       lines.push(`### ${index + 1}. ${severityEmoji} ${finding.title}`);
       lines.push(`**Severity:** ${finding.severity.toUpperCase()} | **Type:** ${finding.type}`);
@@ -125,7 +125,7 @@ function formatAnalysisAsMarkdown(result: AnalysisResult): string {
   // Recommendations
   if (result.recommendations && result.recommendations.length > 0) {
     lines.push('## Recommendations\n');
-    result.recommendations.forEach((rec) => {
+    result.recommendations.forEach(rec => {
       lines.push(`- ${rec}`);
     });
     lines.push('');
@@ -170,14 +170,34 @@ export class ToolRegistry {
     });
 
     // Initialize secret scanner
-    this.secretScanner = dependencies.secretScanner || new SecretScanner(
-      {
-        enabled: dependencies.config.secretScanning.enabled,
-        patterns: dependencies.config.secretScanning.patterns,
-        excludePatterns: dependencies.config.secretScanning.excludePatterns,
-      },
-      dependencies.logger
-    );
+    this.secretScanner =
+      dependencies.secretScanner ??
+      new SecretScanner(
+        {
+          enabled: dependencies.config.secretScanning.enabled,
+          patterns: dependencies.config.secretScanning.patterns,
+          excludePatterns: dependencies.config.secretScanning.excludePatterns,
+        },
+        dependencies.logger
+      );
+  }
+
+  private getMaxCodeLengthOverride(args: unknown, fallback: number): number {
+    if (typeof args !== 'object' || args === null) {
+      return fallback;
+    }
+
+    const value = (args as Record<string, unknown>).maxCodeLength;
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return fallback;
+    }
+
+    // Mirror config schema bounds: 100..1,000,000
+    if (value < 100 || value > 1_000_000) {
+      return fallback;
+    }
+
+    return value;
   }
 
   /**
@@ -197,7 +217,7 @@ export class ToolRegistry {
           description: 'Perform comprehensive code analysis using Codex AI',
           inputSchema: analysisParamsSchema.shape,
         },
-        async (args) => {
+        async args => {
           logger.info({ tool: 'analyze_code_with_codex' }, 'Tool called');
           return await this.handleCodexAnalysis(args);
         }
@@ -214,7 +234,7 @@ export class ToolRegistry {
           description: 'Perform comprehensive code analysis using Gemini CLI',
           inputSchema: analysisParamsSchema.shape,
         },
-        async (args) => {
+        async args => {
           logger.info({ tool: 'analyze_code_with_gemini' }, 'Tool called');
           return await this.handleGeminiAnalysis(args);
         }
@@ -230,7 +250,7 @@ export class ToolRegistry {
           description: 'Perform code analysis using both Codex and Gemini, then aggregate results',
           inputSchema: CombinedAnalysisInputSchema.shape,
         },
-        async (args) => {
+        async args => {
           logger.info({ tool: 'analyze_code_combined' }, 'Tool called');
           return await this.handleCombinedAnalysis(args);
         }
@@ -245,9 +265,9 @@ export class ToolRegistry {
         description: 'Get the status of an async code analysis by analysis ID',
         inputSchema: AnalysisStatusInputSchema.shape,
       },
-      async (args) => {
+      args => {
         logger.info({ tool: 'get_analysis_status' }, 'Tool called');
-        return await this.handleGetAnalysisStatus(args);
+        return this.handleGetAnalysisStatus(args);
       }
     );
 
@@ -259,9 +279,9 @@ export class ToolRegistry {
         description: 'Scan code for hardcoded secrets, API keys, passwords, and sensitive data',
         inputSchema: ScanSecretsInputSchema.shape,
       },
-      async (args) => {
+      args => {
         logger.info({ tool: 'scan_secrets' }, 'Tool called');
-        return await this.handleScanSecrets(args);
+        return this.handleScanSecrets(args);
       }
     );
 
@@ -276,7 +296,9 @@ export class ToolRegistry {
    * MAJOR FIX #7: Use queue for concurrency control
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleCodexAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }>}> {
+  private async handleCodexAnalysis(
+    args: unknown
+  ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { codexService, config, logger } = this.dependencies;
 
     if (!codexService) {
@@ -285,7 +307,7 @@ export class ToolRegistry {
 
     // CRITICAL FIX #4: Allow per-request maxCodeLength override via validation
     // The schema itself still uses config default, but we validate against it
-    const maxCodeLength = (args as any).maxCodeLength ?? config.analysis.maxCodeLength;
+    const maxCodeLength = this.getMaxCodeLengthOverride(args, config.analysis.maxCodeLength);
     const schema = createCodeAnalysisParamsSchema(maxCodeLength);
 
     // ENHANCEMENT: Validate with detailed error messages
@@ -378,7 +400,9 @@ export class ToolRegistry {
    * MAJOR FIX #7: Use queue for concurrency control
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleGeminiAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private async handleGeminiAnalysis(
+    args: unknown
+  ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { geminiService, config, logger } = this.dependencies;
 
     if (!geminiService) {
@@ -386,7 +410,7 @@ export class ToolRegistry {
     }
 
     // CRITICAL FIX #4: Allow per-request maxCodeLength override
-    const maxCodeLength = (args as any).maxCodeLength ?? config.analysis.maxCodeLength;
+    const maxCodeLength = this.getMaxCodeLengthOverride(args, config.analysis.maxCodeLength);
     const schema = createCodeAnalysisParamsSchema(maxCodeLength);
 
     // ENHANCEMENT: Validate with detailed error messages
@@ -478,7 +502,9 @@ export class ToolRegistry {
    * MAJOR FIX #7: Respect parallelExecution flag for concurrency
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleCombinedAnalysis(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private async handleCombinedAnalysis(
+    args: unknown
+  ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
     const { codexService, geminiService, aggregator, logger } = this.dependencies;
 
     if (!codexService || !geminiService) {
@@ -486,7 +512,11 @@ export class ToolRegistry {
     }
 
     // ENHANCEMENT: Validate input with detailed error messages
-    const params = ValidationUtils.validateOrThrow(CombinedAnalysisInputSchema, args, 'analyze_code_combined');
+    const params = ValidationUtils.validateOrThrow(
+      CombinedAnalysisInputSchema,
+      args,
+      'analyze_code_combined'
+    );
 
     // ENHANCEMENT: Sanitize and warn about modifications
     const { sanitized, warnings } = ValidationUtils.sanitizeParams(params);
@@ -516,14 +546,16 @@ export class ToolRegistry {
       const serviceParams = {
         prompt: finalParams.prompt,
         context: finalParams.context,
-        options: finalParams.options ? {
-          timeout: finalParams.options.timeout,
-          severity: finalParams.options.severity,
-          template: finalParams.options.template,
-          preset: finalParams.options.preset,
-          autoDetect: finalParams.options.autoDetect,
-          warnOnMissingContext: finalParams.options.warnOnMissingContext,
-        } : undefined,
+        options: finalParams.options
+          ? {
+              timeout: finalParams.options.timeout,
+              severity: finalParams.options.severity,
+              template: finalParams.options.template,
+              preset: finalParams.options.preset,
+              autoDetect: finalParams.options.autoDetect,
+              warnOnMissingContext: finalParams.options.warnOnMissingContext,
+            }
+          : undefined,
       };
 
       // Execute analyses (parallel or sequential based on option)
@@ -551,7 +583,7 @@ export class ToolRegistry {
       aggregated.analysisId = analysisId;
 
       // CRITICAL FIX #3: Store aggregated result
-      this.analysisStatusStore.setResult(analysisId, aggregated as any);
+      this.analysisStatusStore.setResult(analysisId, aggregated);
 
       logger.info({ analysisId }, 'Combined analysis completed successfully');
 
@@ -559,7 +591,7 @@ export class ToolRegistry {
         content: [
           {
             type: 'text' as const,
-            text: formatAnalysisAsMarkdown(aggregated as any),
+            text: formatAnalysisAsMarkdown(aggregated),
           },
         ],
       };
@@ -580,9 +612,15 @@ export class ToolRegistry {
    * CRITICAL FIX #3: Properly retrieve and return status
    * ENHANCEMENT: Use enhanced validation with detailed error messages
    */
-  private async handleGetAnalysisStatus(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private handleGetAnalysisStatus(args: unknown): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
     // ENHANCEMENT: Validate input with detailed error messages
-    const params = ValidationUtils.validateOrThrow(AnalysisStatusInputSchema, args, 'get_analysis_status');
+    const params = ValidationUtils.validateOrThrow(
+      AnalysisStatusInputSchema,
+      args,
+      'get_analysis_status'
+    );
 
     // Get status from store
     const status = this.analysisStatusStore.get(params.analysisId);
@@ -604,7 +642,7 @@ export class ToolRegistry {
   /**
    * Handle secret scanning tool
    */
-  private async handleScanSecrets(args: unknown): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  private handleScanSecrets(args: unknown): { content: Array<{ type: 'text'; text: string }> } {
     const { logger } = this.dependencies;
 
     // Validate input
@@ -625,10 +663,10 @@ export class ToolRegistry {
       timestamp: new Date().toISOString(),
       summary: {
         totalFindings: secretFindings.length,
-        critical: secretFindings.filter((f) => f.severity === 'critical').length,
-        high: secretFindings.filter((f) => f.severity === 'high').length,
-        medium: secretFindings.filter((f) => f.severity === 'medium').length,
-        low: secretFindings.filter((f) => f.severity === 'low').length,
+        critical: secretFindings.filter(f => f.severity === 'critical').length,
+        high: secretFindings.filter(f => f.severity === 'high').length,
+        medium: secretFindings.filter(f => f.severity === 'medium').length,
+        low: secretFindings.filter(f => f.severity === 'low').length,
         byCategory: this.groupByCategory(secretFindings),
       },
       findings: analysisFindings,
@@ -663,7 +701,7 @@ export class ToolRegistry {
   private groupByCategory(findings: Array<{ category: string }>): Record<string, number> {
     const groups: Record<string, number> = {};
     for (const finding of findings) {
-      groups[finding.category] = (groups[finding.category] || 0) + 1;
+      groups[finding.category] = (groups[finding.category] ?? 0) + 1;
     }
     return groups;
   }
@@ -724,12 +762,13 @@ export class ToolRegistry {
       // Findings
       lines.push('## Findings\n');
       result.findings.forEach((finding, index) => {
-        const severityEmoji = {
-          critical: '🔴',
-          high: '🟠',
-          medium: '🟡',
-          low: '🔵',
-        }[finding.severity] || '⚪';
+        const severityEmoji =
+          {
+            critical: '🔴',
+            high: '🟠',
+            medium: '🟡',
+            low: '🔵',
+          }[finding.severity] ?? '⚪';
 
         lines.push(`### ${index + 1}. ${severityEmoji} ${finding.title}`);
         lines.push(`**Severity:** ${finding.severity.toUpperCase()}`);
@@ -746,7 +785,9 @@ export class ToolRegistry {
 
     // Metadata
     lines.push('---');
-    lines.push(`*Scan ID: ${result.scanId} | Patterns: ${result.metadata.patternsUsed} | Duration: ${result.metadata.duration}ms*`);
+    lines.push(
+      `*Scan ID: ${result.scanId} | Patterns: ${result.metadata.patternsUsed} | Duration: ${result.metadata.duration}ms*`
+    );
 
     return lines.join('\n');
   }

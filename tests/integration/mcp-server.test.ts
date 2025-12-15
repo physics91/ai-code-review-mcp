@@ -165,8 +165,12 @@ describe('MCP Server Integration', () => {
 
   describe('CLI Execution Tests', () => {
     it('should execute codex CLI with correct arguments', async () => {
-      // Mock successful CLI execution
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good code\\",\\"recommendations\\":[]}"}';
+      // Mock successful CLI execution - direct JSON format
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good code',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockImplementation(async (cmd: any, args: any) => {
         // Mock 'which' command for PATH resolution
@@ -236,7 +240,11 @@ describe('MCP Server Integration', () => {
           };
         }
         return {
-          stdout: '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}',
+          stdout: JSON.stringify({
+            findings: [],
+            overallAssessment: 'Good',
+            recommendations: [],
+          }),
           exitCode: 0,
         } as any;
       });

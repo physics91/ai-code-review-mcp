@@ -45,7 +45,10 @@ export const AnalysisContextSchema = z
       'Target platform for platform-specific security checks'
     ),
     projectType: ProjectTypeSchema.optional().describe('Project type for contextual analysis'),
-    language: z.string().optional().describe('Primary programming language (e.g., typescript, python, go)'),
+    language: z
+      .string()
+      .optional()
+      .describe('Primary programming language (e.g., typescript, python, go)'),
     framework: z.string().optional().describe('Framework in use (e.g., react, express, fastapi)'),
 
     // Code completeness
@@ -61,7 +64,10 @@ export const AnalysisContextSchema = z
       .describe('Focus areas for analysis: security, performance, style, bugs'),
 
     // Preset reference
-    preset: z.string().optional().describe('Context preset name to apply (e.g., react-web, nodejs-api)'),
+    preset: z
+      .string()
+      .optional()
+      .describe('Context preset name to apply (e.g., react-web, nodejs-api)'),
 
     // Extension point for custom context
     custom: z

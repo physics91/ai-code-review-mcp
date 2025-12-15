@@ -29,7 +29,9 @@ export const PromptTemplateSchema = z.object({
   description: z.string().optional().describe('Description of the template purpose'),
   template: z
     .string()
-    .describe('Template string with {{variable}} placeholders: {{contextSection}}, {{formatInstructions}}, {{prompt}}'),
+    .describe(
+      'Template string with {{variable}} placeholders: {{contextSection}}, {{formatInstructions}}, {{prompt}}'
+    ),
   sections: z
     .array(PromptSectionSchema)
     .optional()

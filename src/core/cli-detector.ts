@@ -108,7 +108,7 @@ async function findInPath(command: string): Promise<string | null> {
     if (result.exitCode === 0 && result.stdout) {
       // Return first line (primary match)
       const lines = result.stdout.split('\n');
-      return lines[0]?.trim() || null;
+      return lines[0]?.trim() ?? null;
     }
 
     return null;
@@ -187,7 +187,10 @@ export async function detectCodexCLIPath(
   const defaultPaths = getDefaultCLIPaths(cliName);
   for (const path of defaultPaths) {
     if (checkPathExists(path)) {
-      logger?.info({ path, source: 'detected', platform: process.platform }, 'Codex CLI path detected');
+      logger?.info(
+        { path, source: 'detected', platform: process.platform },
+        'Codex CLI path detected'
+      );
       return {
         path,
         source: 'detected',
@@ -268,7 +271,10 @@ export async function detectGeminiCLIPath(
   const defaultPaths = getDefaultCLIPaths(cliName);
   for (const path of defaultPaths) {
     if (checkPathExists(path)) {
-      logger?.info({ path, source: 'detected', platform: process.platform }, 'Gemini CLI path detected');
+      logger?.info(
+        { path, source: 'detected', platform: process.platform },
+        'Gemini CLI path detected'
+      );
       return {
         path,
         source: 'detected',

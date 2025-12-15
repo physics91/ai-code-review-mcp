@@ -72,19 +72,19 @@ describe('ConfigManager', () => {
       expect(config.codex.search).toBe(true);
     });
 
-    it('should have reasoningEffort option with default high', async () => {
+    it('should have reasoningEffort option with default xhigh', async () => {
       const config = await ConfigManager.load();
 
-      // Test that reasoningEffort option exists and defaults to 'high'
+      // Test that reasoningEffort option exists and defaults to 'xhigh'
       expect(config.codex).toHaveProperty('reasoningEffort');
-      expect(config.codex.reasoningEffort).toBe('high');
+      expect(config.codex.reasoningEffort).toBe('xhigh');
     });
 
-    it('should have model default as gpt-5.1', async () => {
+    it('should have model default as gpt-5.2', async () => {
       const config = await ConfigManager.load();
 
-      // Test that model defaults to 'gpt-5.1' (from config/default.json)
-      expect(config.codex.model).toBe('gpt-5.1');
+      // Test that model defaults to 'gpt-5.2' (from config/default.json)
+      expect(config.codex.model).toBe('gpt-5.2');
     });
 
     it('should accept valid reasoningEffort values', async () => {

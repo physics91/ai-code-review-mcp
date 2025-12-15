@@ -18,7 +18,7 @@ import { ToolRegistry } from './tools/registry.js';
 /**
  * Main entry point
  */
-async function main() {
+async function main(): Promise<void> {
   let logger: Logger | undefined;
 
   try {
@@ -27,7 +27,7 @@ async function main() {
 
     // Use server.logLevel (priority) or logging.level for logger initialization
     logger = Logger.create({
-      level: config.server.logLevel || config.logging.level,
+      level: config.server.logLevel ?? config.logging.level,
       pretty: config.logging.pretty,
       file: config.logging.file,
     });
@@ -42,21 +42,27 @@ async function main() {
 
     // Initialize services with context system configuration
     const codexService = config.codex.enabled
-      ? new CodexAnalysisService({
-          ...config.codex,
-          context: config.context,
-          prompts: config.prompts,
-          warnings: config.warnings,
-        }, logger)
+      ? new CodexAnalysisService(
+          {
+            ...config.codex,
+            context: config.context,
+            prompts: config.prompts,
+            warnings: config.warnings,
+          },
+          logger
+        )
       : null;
 
     const geminiService = config.gemini.enabled
-      ? new GeminiAnalysisService({
-          ...config.gemini,
-          context: config.context,
-          prompts: config.prompts,
-          warnings: config.warnings,
-        }, logger)
+      ? new GeminiAnalysisService(
+          {
+            ...config.gemini,
+            context: config.context,
+            prompts: config.prompts,
+            warnings: config.warnings,
+          },
+          logger
+        )
       : null;
 
     const aggregator = new AnalysisAggregator(config.analysis, logger);
@@ -79,10 +85,15 @@ async function main() {
     logger.info('Code Review MCP Server started successfully');
 
     // Handle graceful shutdown
-    const shutdown = async () => {
+    const shutdown = (): void => {
       logger?.info('Shutting down Code Review MCP Server');
-      await server.close();
-      process.exit(0);
+      void server
+        .close()
+        .then(() => process.exit(0))
+        .catch((error: unknown) => {
+          logger?.error({ error }, 'Error during server shutdown');
+          process.exit(1);
+        });
     };
 
     process.on('SIGINT', shutdown);
@@ -98,7 +109,7 @@ async function main() {
 }
 
 // Start server
-main().catch((error) => {
+main().catch(error => {
   console.error('Fatal error:', error);
   process.exit(1);
 });

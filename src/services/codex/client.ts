@@ -8,6 +8,7 @@
 import { resolve } from 'path';
 
 import { execa } from 'execa';
+import { z } from 'zod';
 
 import { ContextAutoDetector } from '../../core/auto-detect.js';
 import { detectCodexCLIPath } from '../../core/cli-detector.js';
@@ -22,13 +23,22 @@ import {
   CodexParseError,
 } from '../../core/error-handler.js';
 import { type Logger } from '../../core/logger.js';
-import { PromptTemplateEngine, DEFAULT_FORMAT_INSTRUCTIONS, type TemplateEngineConfig } from '../../core/prompt-template.js';
+import {
+  PromptTemplateEngine,
+  DEFAULT_FORMAT_INSTRUCTIONS,
+  type TemplateEngineConfig,
+} from '../../core/prompt-template.js';
 import { RetryManager } from '../../core/retry.js';
-import { generateUUID, sanitizeParams } from '../../core/utils.js';
+import { generateUUID, sanitizeParams, stripAnsiCodes } from '../../core/utils.js';
 import { WarningSystem, type WarningConfig } from '../../core/warnings.js';
 import type { AnalysisContext } from '../../schemas/context.js';
 import { CodexResponseSchema, type CodexResponse } from '../../schemas/responses.js';
-import { CodeAnalysisParamsSchema, AnalysisResultSchema, type CodeAnalysisParams, type AnalysisResult } from '../../schemas/tools.js';
+import {
+  CodeAnalysisParamsSchema,
+  AnalysisResultSchema,
+  type CodeAnalysisParams,
+  type AnalysisResult,
+} from '../../schemas/tools.js';
 
 export interface CodexServiceConfig {
   cliPath: string;
@@ -37,7 +47,7 @@ export interface CodexServiceConfig {
   retryDelay: number;
   model?: string | null;
   search?: boolean;
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   args?: string[];
   // Context system configuration
   context?: ContextConfig;
@@ -53,6 +63,9 @@ export class CodexAnalysisService {
   private retryManager: RetryManager;
   private allowedCLIPaths: string[];
   private detectedCLIPath: string | null = null;
+
+  // Maximum output size to parse (guard against unexpectedly large responses)
+  private static readonly MAX_PARSE_SIZE = 1024 * 1024; // 1MB
 
   // Context system modules
   private contextManager: ContextManager;
@@ -76,15 +89,16 @@ export class CodexAnalysisService {
 
     // Security-hardened whitelist: Only add config.cliPath if it's a known safe pattern
     // Don't blindly trust config - only allow well-known paths or relative names
-    const isConfigPathSafe = config.cliPath === 'codex' ||
-                             config.cliPath === 'codex.cmd' ||
-                             config.cliPath === 'auto' ||
-                             config.cliPath?.startsWith('/usr/local/bin/') ||
-                             config.cliPath?.startsWith('/usr/bin/') ||
-                             config.cliPath?.startsWith('/opt/codex/') ||
-                             config.cliPath?.startsWith('/opt/homebrew/') ||
-                             config.cliPath?.startsWith('C:\\Program Files\\codex\\') ||
-                             config.cliPath?.startsWith('C:\\Program Files (x86)\\codex\\');
+    const isConfigPathSafe =
+      config.cliPath === 'codex' ||
+      config.cliPath === 'codex.cmd' ||
+      config.cliPath === 'auto' ||
+      config.cliPath?.startsWith('/usr/local/bin/') ||
+      config.cliPath?.startsWith('/usr/bin/') ||
+      config.cliPath?.startsWith('/opt/codex/') ||
+      config.cliPath?.startsWith('/opt/homebrew/') ||
+      config.cliPath?.startsWith('C:\\Program Files\\codex\\') ||
+      config.cliPath?.startsWith('C:\\Program Files (x86)\\codex\\');
 
     const basePaths = [
       ...(isConfigPathSafe ? [config.cliPath] : []),
@@ -110,7 +124,7 @@ export class CodexAnalysisService {
 
     // Initialize CLI path detection if set to 'auto'
     if (config.cliPath === 'auto') {
-      this.initializeCLIPath().catch((error) => {
+      this.initializeCLIPath().catch((error: unknown) => {
         this.logger.warn({ error }, 'Failed to auto-detect Codex CLI path, will use default');
       });
     }
@@ -202,7 +216,7 @@ export class CodexAnalysisService {
       }
 
       // Validate CLI path BEFORE retry logic (security check shouldn't be retried)
-      const cliPath = validated.options?.cliPath || this.config.cliPath;
+      const cliPath = validated.options?.cliPath ?? this.config.cliPath;
       await this.validateCLIPath(cliPath);
 
       // === Context System Integration ===
@@ -225,10 +239,13 @@ export class CodexAnalysisService {
       // Copy preset from options to context if provided (options.preset takes precedence)
       const contextWithPreset: AnalysisContext = {
         ...validated.context,
-        preset: validated.options?.preset || validated.context?.preset,
+        preset: validated.options?.preset ?? validated.context?.preset,
       };
       const resolvedContext = this.contextManager.resolve(contextWithPreset, detectedContext);
-      this.logger.debug({ resolvedContext, preset: contextWithPreset.preset }, 'Resolved analysis context');
+      this.logger.debug(
+        { resolvedContext, preset: contextWithPreset.preset },
+        'Resolved analysis context'
+      );
 
       // Step 3: Generate warnings for missing context
       const warnings = enableWarnings ? this.warningSystem.checkContext(resolvedContext) : [];
@@ -237,14 +254,18 @@ export class CodexAnalysisService {
       }
 
       // Step 4: Select and render prompt template
-      const templateId = validated.options?.template || this.templateEngine.getTemplateForService('codex');
+      const templateId =
+        validated.options?.template ?? this.templateEngine.getTemplateForService('codex');
       const prompt = this.templateEngine.render(templateId, {
         prompt: validated.prompt,
         context: resolvedContext,
         formatInstructions: DEFAULT_FORMAT_INSTRUCTIONS,
       });
 
-      this.logger.debug({ templateId, promptLength: prompt.length }, 'Prompt rendered from template');
+      this.logger.debug(
+        { templateId, promptLength: prompt.length },
+        'Prompt rendered from template'
+      );
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
@@ -257,7 +278,10 @@ export class CodexAnalysisService {
 
       // Apply severity filtering if requested
       if (validated.options?.severity && validated.options.severity !== 'all') {
-        review.findings = this.filterFindingsBySeverity(review.findings, validated.options.severity);
+        review.findings = this.filterFindingsBySeverity(
+          review.findings,
+          validated.options.severity
+        );
         review.summary = this.calculateSummary(review.findings);
       }
 
@@ -282,13 +306,13 @@ export class CodexAnalysisService {
           duration: review.metadata.analysisDuration,
           findings: review.findings.length,
           warnings: warnings.length,
-          context: resolvedContext.language || 'unknown',
+          context: resolvedContext.language ?? 'unknown',
         },
         'Codex review completed'
       );
 
       return review;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error({ analysisId, error }, 'Codex review failed');
 
       // Wrap in domain-specific error if not already
@@ -317,7 +341,6 @@ export class CodexAnalysisService {
     }
   }
 
-
   /**
    * Execute Codex CLI command securely
    * @param cliPath - Pre-validated CLI path (validation done before retry logic)
@@ -339,13 +362,19 @@ export class CodexAnalysisService {
         env: {
           ...process.env,
           // Use model config if specified
-          CODEX_MODEL: this.config.model || undefined,
+          CODEX_MODEL: this.config.model ?? undefined,
         },
         // Security: Don't use shell
         shell: false,
       });
 
-      return result.stdout || result.all || '';
+      const stdout = result.stdout ?? '';
+      if (stdout !== '') {
+        return stdout;
+      }
+
+      const allOutput = result.all ?? '';
+      return allOutput !== '' ? allOutput : '';
     } catch (error: unknown) {
       const err = error as {
         timedOut?: boolean;
@@ -361,14 +390,11 @@ export class CodexAnalysisService {
 
       // ANY non-zero exit code is now an error
       if (err.exitCode !== undefined && err.exitCode !== 0) {
-        throw new CLIExecutionError(
-          `Codex CLI exited with code ${err.exitCode}`,
-          {
-            exitCode: err.exitCode,
-            stderr: err.stderr,
-            stdout: err.stdout,
-          }
-        );
+        throw new CLIExecutionError(`Codex CLI exited with code ${err.exitCode}`, {
+          exitCode: err.exitCode,
+          stderr: err.stderr,
+          stdout: err.stdout,
+        });
       }
 
       throw new CLIExecutionError('Codex CLI execution failed', { cause: error });
@@ -387,7 +413,7 @@ export class CodexAnalysisService {
         if (!this.allowedCLIPaths.includes(cliPath)) {
           this.logger.logSecurityEvent('System PATH executable not in whitelist', {
             cliPath,
-            allowed: this.allowedCLIPaths
+            allowed: this.allowedCLIPaths,
           });
           throw new SecurityError(`CLI path not in allowed list: ${cliPath}`);
         }
@@ -402,7 +428,7 @@ export class CodexAnalysisService {
             const resolvedPath = stdout.trim();
 
             // Verify the resolved path is also in our whitelist or is a known good path
-            const resolvedAllowed = this.allowedCLIPaths.some((allowed) => {
+            const resolvedAllowed = this.allowedCLIPaths.some(allowed => {
               try {
                 const resolvedAllowed = resolve(allowed);
                 return resolvedAllowed === resolvedPath || allowed === cliPath;
@@ -415,7 +441,7 @@ export class CodexAnalysisService {
               this.logger.logSecurityEvent('System PATH resolved to non-whitelisted path', {
                 cliPath,
                 resolvedPath,
-                allowed: this.allowedCLIPaths
+                allowed: this.allowedCLIPaths,
               });
               throw new SecurityError(`Resolved CLI path not in allowed list: ${resolvedPath}`);
             }
@@ -425,7 +451,10 @@ export class CodexAnalysisService {
               throw whichError;
             }
             // 'which' failed but cliPath is in whitelist, allow it
-            this.logger.debug({ cliPath, error: whichError }, 'Could not resolve PATH executable, but in whitelist');
+            this.logger.debug(
+              { cliPath, error: whichError },
+              'Could not resolve PATH executable, but in whitelist'
+            );
           }
         }
 
@@ -437,7 +466,7 @@ export class CodexAnalysisService {
       const resolved = resolve(cliPath);
 
       // Check against whitelist
-      const isAllowed = this.allowedCLIPaths.some((allowed) => {
+      const isAllowed = this.allowedCLIPaths.some(allowed => {
         try {
           // Allow system PATH executables
           if (allowed === 'codex' || allowed === 'codex.cmd') {
@@ -453,7 +482,7 @@ export class CodexAnalysisService {
         this.logger.logSecurityEvent('Invalid CLI path attempted', {
           cliPath,
           resolved,
-          allowed: this.allowedCLIPaths
+          allowed: this.allowedCLIPaths,
         });
         throw new SecurityError(`CLI path not in allowed list: ${cliPath}`);
       }
@@ -503,8 +532,8 @@ export class CodexAnalysisService {
       const safeArgs = this.config.args.filter(arg => {
         const lowerArg = arg.toLowerCase();
         // Check for exact match or flag=value pattern
-        const isDangerous = dangerousFlags.some(flag =>
-          lowerArg === flag || lowerArg.startsWith(flag + '=')
+        const isDangerous = dangerousFlags.some(
+          flag => lowerArg === flag || lowerArg.startsWith(flag + '=')
         );
         // Also block the '--' separator which ends flag parsing
         const isSeparator = arg === '--';
@@ -526,60 +555,77 @@ export class CodexAnalysisService {
 
   /**
    * Parse Codex CLI output into structured format
+   * SIMPLIFIED: Single-pass parsing with raw output preservation
    */
-  private parseCodexOutput(
-    output: string,
-    analysisId: string
-  ): AnalysisResult {
+  private parseCodexOutput(output: string, analysisId: string): AnalysisResult {
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null;
+
+    // Step 0: Guard against unexpectedly large outputs
+    if (output.length > CodexAnalysisService.MAX_PARSE_SIZE) {
+      this.logger.warn(
+        { analysisId, size: output.length },
+        'Codex output exceeds maximum parse size'
+      );
+      return this.createRawOutputResult(
+        analysisId,
+        output.substring(0, 50000),
+        'codex',
+        `Output exceeds maximum parse size of ${CodexAnalysisService.MAX_PARSE_SIZE} bytes`
+      );
+    }
+
+    // Step 1: Clean output (minimal preprocessing)
+    const cleaned = this.cleanOutput(output);
+
     try {
-      // Clean output (remove ANSI codes, etc.)
-      const cleaned = this.cleanOutput(output);
+      // Step 2: Extract the analysis result from Codex JSONL format
+      let analysisJson: unknown = null;
 
-      // Codex exec with --json outputs JSONL (one event per line)
-      // We need to find the final assistant message
       const lines = cleaned.split('\n').filter(line => line.trim());
-
-      let parsed: any = null;
-
-      // Parse JSONL output
       for (const line of lines) {
         try {
-          const event = JSON.parse(line);
+          const event: unknown = JSON.parse(line);
 
-          // Look for item.completed events with agent_message (contains JSON response)
-          if (event.type === 'item.completed' && event.item) {
-            if (event.item.type === 'agent_message') {
-              // Parse the JSON text immediately to avoid double-parsing issues
-              parsed = JSON.parse(event.item.text || '{}');
+          // Look for the final agent message with analysis result
+          if (isRecord(event) && event.type === 'item.completed') {
+            const item = event.item;
+            if (isRecord(item) && item.type === 'agent_message' && typeof item.text === 'string') {
+              // The text field contains the JSON response as a string
+              analysisJson = JSON.parse(item.text) as unknown;
+              break;
             }
           }
-          // Fallback: old format (message with role)
-          else if (event.type === 'message' && event.role === 'assistant') {
-            parsed = JSON.parse(event.content || '{}');
-          }
-        } catch {
-          // Skip non-JSON lines or malformed events
+        } catch (lineError: unknown) {
+          // Non-JSON line, log at debug level and skip
+          this.logger.debug(
+            { analysisId, line: line.substring(0, 100), error: lineError },
+            'Skipping non-JSON line in Codex output'
+          );
           continue;
         }
       }
 
-      if (!parsed) {
-        // Fallback: try to extract JSON from entire output
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          this.logger.warn({ output: cleaned.substring(0, 500) }, 'No JSON found in Codex output');
-          throw new ParseError('No JSON found in Codex output');
+      // Step 3: If no structured event found, try direct JSON parse
+      if (!analysisJson) {
+        try {
+          analysisJson = JSON.parse(cleaned);
+        } catch {
+          // Parsing failed - return raw output
+          this.logger.warn(
+            { analysisId, outputLength: cleaned.length },
+            'Could not parse Codex output as JSON, returning raw'
+          );
+          return this.createRawOutputResult(analysisId, cleaned, 'codex');
         }
-        parsed = JSON.parse(jsonMatch[0]);
       }
 
-      // Validate response against schema
-      const validated = CodexResponseSchema.parse(parsed);
+      // Step 4: Validate against schema
+      const validated = CodexResponseSchema.parse(analysisJson);
 
-      // Calculate summary
+      // Step 5: Build result
       const summary = this.calculateSummary(validated.findings);
 
-      // Transform to internal format
       const result: AnalysisResult = {
         success: true,
         analysisId,
@@ -599,10 +645,16 @@ export class CodexAnalysisService {
 
       return result;
     } catch (error) {
-      this.logger.error({ error, output: output.substring(0, 500) }, 'Failed to parse Codex output');
+      this.logger.error({ error, analysisId }, 'Failed to parse Codex output');
 
-      if (error instanceof ParseError) {
-        throw error;
+      // Preserve raw output on parse failure - use sanitized 'cleaned' output
+      if (error instanceof z.ZodError) {
+        return this.createRawOutputResult(
+          analysisId,
+          cleaned,
+          'codex',
+          `Schema validation failed: ${error.message}`
+        );
       }
 
       throw new ParseError('Failed to parse Codex output', { cause: error });
@@ -610,11 +662,41 @@ export class CodexAnalysisService {
   }
 
   /**
+   * Create result with raw output when parsing fails
+   */
+  private createRawOutputResult(
+    analysisId: string,
+    rawOutput: string,
+    source: 'codex' | 'gemini',
+    error?: string
+  ): AnalysisResult {
+    return {
+      success: false,
+      analysisId,
+      timestamp: new Date().toISOString(),
+      source,
+      summary: {
+        totalFindings: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      },
+      findings: [],
+      overallAssessment: error ?? 'Failed to parse AI response',
+      metadata: {
+        analysisDuration: 0,
+      },
+      rawOutput: rawOutput.substring(0, 50000), // Limit size
+    };
+  }
+
+  /**
    * Clean CLI output (remove ANSI codes, etc.)
    */
   private cleanOutput(output: string): string {
     // Remove ANSI escape codes
-    let cleaned = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+    let cleaned = stripAnsiCodes(output);
 
     // Remove null bytes
     cleaned = cleaned.replace(/\0/g, '');
@@ -628,13 +710,19 @@ export class CodexAnalysisService {
   /**
    * Calculate summary statistics from findings
    */
-  private calculateSummary(findings: CodexResponse['findings']) {
+  private calculateSummary(findings: CodexResponse['findings']): {
+    totalFindings: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  } {
     return {
       totalFindings: findings.length,
-      critical: findings.filter((f) => f.severity === 'critical').length,
-      high: findings.filter((f) => f.severity === 'high').length,
-      medium: findings.filter((f) => f.severity === 'medium').length,
-      low: findings.filter((f) => f.severity === 'low').length,
+      critical: findings.filter(f => f.severity === 'critical').length,
+      high: findings.filter(f => f.severity === 'high').length,
+      medium: findings.filter(f => f.severity === 'medium').length,
+      low: findings.filter(f => f.severity === 'low').length,
     };
   }
 
@@ -648,7 +736,9 @@ export class CodexAnalysisService {
     if (severity === 'high') {
       return findings.filter(f => f.severity === 'critical' || f.severity === 'high');
     } else if (severity === 'medium') {
-      return findings.filter(f => f.severity === 'critical' || f.severity === 'high' || f.severity === 'medium');
+      return findings.filter(
+        f => f.severity === 'critical' || f.severity === 'high' || f.severity === 'medium'
+      );
     }
     return findings;
   }

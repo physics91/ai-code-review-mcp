@@ -75,7 +75,8 @@ export interface AggregatedFinding extends AnalysisFinding {
   confidence: Confidence;
 }
 
-export interface AggregatedAnalysis extends Omit<AnalysisResult, 'source' | 'summary' | 'findings'> {
+export interface AggregatedAnalysis
+  extends Omit<AnalysisResult, 'source' | 'summary' | 'findings'> {
   source: 'combined';
   summary: AnalysisSummary & {
     consensus: number;

@@ -4,6 +4,12 @@
 
 AI-powered code analysis MCP server using Codex and Gemini CLI tools with context-aware analysis capabilities.
 
+## Engineering Principles
+
+- **DRY (Don't Repeat Yourself):** Avoid duplicating logic across tools/services; extract shared utilities (e.g., validation, retry, formatting) into `src/core/`.
+- **SSOT (Single Source of Truth):** Keep config/schema/IDs in one place (e.g., `config/default.json`, `src/schemas/**`); when changing one, update its schema/tests/docs together.
+- **SOLID:** Prefer small, testable modules; keep tool handlers thin and delegate work to services; inject dependencies via constructors and avoid hard-coded globals where practical.
+
 ## Prerequisites
 
 - Node.js >= 20.0.0
@@ -64,13 +70,14 @@ npm run test:ui
 ```
 
 ### Test File Location
-Tests are located in `__tests__` directories next to source files:
+Tests live primarily under `tests/` (unit/integration/e2e). There is also a small set of co-located tests under `src/**/__tests__`:
 ```
+tests/
+├── unit/
+├── integration/
+└── e2e/
 src/
-├── core/
-│   ├── __tests__/
-│   │   └── validation.test.ts
-│   └── *.ts
+└── core/__tests__/
 ```
 
 ## Linting & Formatting
@@ -187,7 +194,7 @@ npm run typecheck && npm run lint && npm run test
 
 Enable debug logging:
 ```bash
-LOG_LEVEL=debug npm run dev
+CODE_REVIEW_MCP_LOG_LEVEL=debug npm run dev
 ```
 
 Or set in `config/default.json`:

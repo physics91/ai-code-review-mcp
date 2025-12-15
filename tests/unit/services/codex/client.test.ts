@@ -34,9 +34,9 @@ describe('CodexAnalysisService', () => {
           exitCode: 0,
         } as any;
       }
-      // Default mock for actual codex execution
+      // Default mock for actual codex execution - using direct JSON format
       return {
-        stdout: '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}',
+        stdout: '{"findings":[],"overallAssessment":"Good","recommendations":[]}',
         stderr: '',
         exitCode: 0,
       } as any;
@@ -60,10 +60,19 @@ describe('CodexAnalysisService', () => {
 
   describe('analyzeCode', () => {
     it('should successfully analyze code', async () => {
-      // Mock Codex CLI JSONL output
-      const mockOutput = [
-        '{"type":"message","role":"assistant","content":"{\\"findings\\":[{\\"type\\":\\"bug\\",\\"severity\\":\\"high\\",\\"line\\":10,\\"title\\":\\"Null pointer exception\\",\\"description\\":\\"Variable might be null\\",\\"suggestion\\":\\"Add null check\\"}],\\"overallAssessment\\":\\"Code has some issues\\",\\"recommendations\\":[\\"Add error handling\\"]}"}',
-      ].join('\n');
+      // Mock Codex CLI output with direct JSON format
+      const mockOutput = JSON.stringify({
+        findings: [{
+          type: 'bug',
+          severity: 'high',
+          line: 10,
+          title: 'Null pointer exception',
+          description: 'Variable might be null',
+          suggestion: 'Add null check',
+        }],
+        overallAssessment: 'Code has some issues',
+        recommendations: ['Add error handling'],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -125,23 +134,30 @@ describe('CodexAnalysisService', () => {
       ).rejects.toThrow('Codex CLI timed out after');
     });
 
-    it('should handle parse errors for invalid JSON', async () => {
+    it('should handle parse errors for invalid JSON by returning rawOutput', async () => {
       vi.mocked(execa).mockResolvedValue({
         stdout: 'This is not JSON',
         stderr: '',
         exitCode: 0,
       } as any);
 
-      await expect(
-        service.analyzeCode({
-          prompt: 'Review this code: test code',
-        })
-      ).rejects.toThrow('No JSON found in Codex output');
+      const result = await service.analyzeCode({
+        prompt: 'Review this code: test code',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.rawOutput).toBeDefined();
+      expect(result.rawOutput).toContain('This is not JSON');
     });
 
-    it('should extract JSON from JSONL output', async () => {
+    it('should extract JSON from JSONL output (item.completed event)', async () => {
+      const analysisJson = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good code',
+        recommendations: [],
+      });
       const mockOutput = [
-        '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good code\\",\\"recommendations\\":[]}"}',
+        `{"type":"item.completed","item":{"type":"agent_message","text":${JSON.stringify(analysisJson)}}}`,
       ].join('\n');
 
       vi.mocked(execa).mockResolvedValue({
@@ -158,7 +174,11 @@ describe('CodexAnalysisService', () => {
     });
 
     it('should include metadata in response', async () => {
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good code\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good code',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -182,13 +202,9 @@ describe('CodexAnalysisService', () => {
       ];
 
       const mockOutput = JSON.stringify({
-        type: 'message',
-        role: 'assistant',
-        content: JSON.stringify({
-          findings,
-          overallAssessment: 'Mixed',
-          recommendations: [],
-        }),
+        findings,
+        overallAssessment: 'Mixed',
+        recommendations: [],
       });
 
       vi.mocked(execa).mockResolvedValue({
@@ -208,7 +224,11 @@ describe('CodexAnalysisService', () => {
     });
 
     it('should execute codex CLI with correct arguments', async () => {
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -244,7 +264,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -271,13 +295,9 @@ describe('CodexAnalysisService', () => {
       ];
 
       const mockOutput = JSON.stringify({
-        type: 'message',
-        role: 'assistant',
-        content: JSON.stringify({
-          findings,
-          overallAssessment: 'Mixed',
-          recommendations: [],
-        }),
+        findings,
+        overallAssessment: 'Mixed',
+        recommendations: [],
       });
 
       vi.mocked(execa).mockResolvedValue({
@@ -310,7 +330,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -362,9 +386,13 @@ describe('CodexAnalysisService', () => {
             exitCode: 0,
           } as any;
         }
-        // Actual codex execution
+        // Actual codex execution - direct JSON format
         return {
-          stdout: '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}',
+          stdout: JSON.stringify({
+            findings: [],
+            overallAssessment: 'Good',
+            recommendations: [],
+          }),
           exitCode: 0,
         } as any;
       });
@@ -419,7 +447,11 @@ describe('CodexAnalysisService', () => {
     });
 
     it('should handle per-request cliPath override', async () => {
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -476,7 +508,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -510,7 +546,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -543,7 +583,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -576,7 +620,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,
@@ -598,7 +646,7 @@ describe('CodexAnalysisService', () => {
     });
 
     it('should support all reasoningEffort enum values', async () => {
-      const reasoningValues = ['minimal', 'low', 'medium', 'high'] as const;
+      const reasoningValues = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 
       for (const effort of reasoningValues) {
         vi.clearAllMocks();
@@ -617,7 +665,11 @@ describe('CodexAnalysisService', () => {
           mockLogger
         );
 
-        const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+        const mockOutput = JSON.stringify({
+          findings: [],
+          overallAssessment: 'Good',
+          recommendations: [],
+        });
 
         vi.mocked(execa).mockResolvedValue({
           stdout: mockOutput,
@@ -653,7 +705,11 @@ describe('CodexAnalysisService', () => {
         mockLogger
       );
 
-      const mockOutput = '{"type":"message","role":"assistant","content":"{\\"findings\\":[],\\"overallAssessment\\":\\"Good\\",\\"recommendations\\":[]}"}';
+      const mockOutput = JSON.stringify({
+        findings: [],
+        overallAssessment: 'Good',
+        recommendations: [],
+      });
 
       vi.mocked(execa).mockResolvedValue({
         stdout: mockOutput,

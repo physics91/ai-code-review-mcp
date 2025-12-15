@@ -40,7 +40,10 @@ export interface FieldError {
  * Field constraint documentation for better error messages
  * CRITICAL FIX: Keys now match Zod issue codes (too_small, too_big, etc.)
  */
-const FIELD_CONSTRAINTS: Record<string, { description: string; format?: string; examples?: string[] }> = {
+const FIELD_CONSTRAINTS: Record<
+  string,
+  { description: string; format?: string; examples?: string[] }
+> = {
   prompt: {
     description: 'Code review prompt (can include code, instructions, context, etc.)',
     examples: [
@@ -96,6 +99,34 @@ const FIELD_CONSTRAINTS: Record<string, { description: string; format?: string; 
  * Validation utility class
  */
 export class ValidationUtils {
+  private static formatValueForMessage(value: unknown): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+
+    if (typeof value === 'string') {
+      const trimmed = value.length > 50 ? `${value.slice(0, 47)}...` : value;
+      return trimmed.replace(/\n/g, '\\n');
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      return `[Array(${value.length})]`;
+    }
+
+    if (value instanceof Error) {
+      return value.message;
+    }
+
+    if (typeof value === 'object') {
+      return '[object]';
+    }
+
+    return String(value);
+  }
+
   /**
    * Validate data against a Zod schema with enhanced error messages
    */
@@ -119,7 +150,10 @@ export class ValidationUtils {
         error: {
           message: 'Validation failed with an unknown error',
           fields: [],
-          suggestions: ['Check that your input matches the expected format', 'Consult the MCP tool documentation'],
+          suggestions: [
+            'Check that your input matches the expected format',
+            'Consult the MCP tool documentation',
+          ],
         },
       };
     }
@@ -151,7 +185,7 @@ export class ValidationUtils {
    * Format Zod error into user-friendly validation error
    */
   private static formatZodError(error: ZodError, data: unknown): ValidationErrorDetails {
-    const fieldErrors = error.issues.map((issue) => this.formatZodIssue(issue, data));
+    const fieldErrors = error.issues.map(issue => this.formatZodIssue(issue, data));
 
     // Generate helpful suggestions based on error types
     const suggestions = this.generateSuggestions(error.issues, fieldErrors);
@@ -173,7 +207,7 @@ export class ValidationUtils {
 
     // Get constraint info for this field
     const constraintKey = `${fieldPath}.${issue.code}`;
-    const constraint = FIELD_CONSTRAINTS[constraintKey] || FIELD_CONSTRAINTS[fieldPath];
+    const constraint = FIELD_CONSTRAINTS[constraintKey] ?? FIELD_CONSTRAINTS[fieldPath];
 
     let errorMessage = issue.message;
     let constraintDescription: string | undefined;
@@ -197,7 +231,7 @@ export class ValidationUtils {
             errorMessage = `Field '${fieldPath}' must be at least ${issue.minimum} characters long (current: ${typeof fieldValue === 'string' ? fieldValue.length : 'unknown'})`;
           }
         } else if (issue.type === 'number') {
-          errorMessage = `Field '${fieldPath}' must be at least ${issue.minimum} (current: ${fieldValue})`;
+          errorMessage = `Field '${fieldPath}' must be at least ${issue.minimum} (current: ${this.formatValueForMessage(fieldValue)})`;
         } else if (issue.type === 'array') {
           errorMessage = `Field '${fieldPath}' must contain at least ${issue.minimum} items`;
         }
@@ -210,7 +244,7 @@ export class ValidationUtils {
         if (issue.type === 'string') {
           errorMessage = `Field '${fieldPath}' exceeds maximum length of ${issue.maximum} characters (current: ${typeof fieldValue === 'string' ? fieldValue.length : 'unknown'})`;
         } else if (issue.type === 'number') {
-          errorMessage = `Field '${fieldPath}' exceeds maximum value of ${issue.maximum} (current: ${fieldValue})`;
+          errorMessage = `Field '${fieldPath}' exceeds maximum value of ${issue.maximum} (current: ${this.formatValueForMessage(fieldValue)})`;
         } else if (issue.type === 'array') {
           errorMessage = `Field '${fieldPath}' exceeds maximum of ${issue.maximum} items`;
         }
@@ -219,13 +253,15 @@ export class ValidationUtils {
         }
         break;
 
-      case 'invalid_enum_value':
-        const options = issue.options.map((o) => `'${o}'`).join(', ');
-        errorMessage = `Field '${fieldPath}' must be one of: ${options} (received: '${fieldValue}')`;
+      case 'invalid_enum_value': {
+        const options = issue.options.map(o => `'${o}'`).join(', ');
+        const received = this.formatValueForMessage(fieldValue);
+        errorMessage = `Field '${fieldPath}' must be one of: ${options} (received: '${received}')`;
         if (constraint?.examples) {
           expectedFormat = `Valid options: ${options}`;
         }
         break;
+      }
 
       case 'invalid_string':
         if (issue.validation === 'email') {
@@ -249,7 +285,7 @@ export class ValidationUtils {
       value: fieldValue,
       error: errorMessage,
       constraint: constraintDescription,
-      expectedFormat: expectedFormat || constraint?.format,
+      expectedFormat: expectedFormat ?? constraint?.format,
     };
   }
 
@@ -257,12 +293,26 @@ export class ValidationUtils {
    * Get nested value from object using path array
    */
   private static getNestedValue(obj: unknown, path: (string | number)[]): unknown {
-    let current: any = obj;
+    let current: unknown = obj;
     for (const key of path) {
       if (current === null || current === undefined) {
         return undefined;
       }
-      current = current[key];
+
+      if (typeof key === 'number') {
+        if (Array.isArray(current)) {
+          current = current[key];
+          continue;
+        }
+        return undefined;
+      }
+
+      if (typeof current !== 'object') {
+        return undefined;
+      }
+
+      const record = current as Record<string, unknown>;
+      current = record[key];
     }
     return current;
   }
@@ -305,10 +355,49 @@ export class ValidationUtils {
    * SECURITY: Prevents ANSI injection and control character attacks
    */
   private static escapeControlCharacters(str: string): string {
-    return str.replace(/[\x00-\x1F\x7F-\x9F]/g, (char) => {
+    let result = '';
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (!char) continue;
+
       const code = char.charCodeAt(0);
-      return `\\x${code.toString(16).padStart(2, '0')}`;
-    });
+      const isControl = (code >= 0 && code <= 31) || (code >= 127 && code <= 159);
+
+      if (isControl) {
+        result += `\\x${code.toString(16).padStart(2, '0')}`;
+      } else {
+        result += char;
+      }
+    }
+
+    return result;
+  }
+
+  private static stripControlCharacters(
+    value: string,
+    options: { keepNewlinesAndTabs: boolean }
+  ): string {
+    let result = '';
+
+    for (let i = 0; i < value.length; i++) {
+      const char = value[i];
+      if (!char) continue;
+
+      const code = char.charCodeAt(0);
+      const isControl = (code >= 0 && code <= 31) || code === 127;
+      if (!isControl) {
+        result += char;
+        continue;
+      }
+
+      const shouldKeep = options.keepNewlinesAndTabs && (code === 9 || code === 10 || code === 13);
+      if (shouldKeep) {
+        result += char;
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -355,7 +444,8 @@ export class ValidationUtils {
     }
 
     if (fieldErrors.length === 1) {
-      return `Validation error: ${fieldErrors[0].error}`;
+      const firstError = fieldErrors[0];
+      return `Validation error: ${firstError?.error ?? 'Unknown error'}`;
     }
 
     return `Validation failed with ${fieldErrors.length} errors:\n${fieldErrors.map((e, i) => `  ${i + 1}. ${e.error}`).join('\n')}`;
@@ -366,52 +456,66 @@ export class ValidationUtils {
    */
   private static generateSuggestions(issues: ZodIssue[], fieldErrors: FieldError[]): string[] {
     const suggestions: string[] = [];
-    const errorTypes = new Set(issues.map((i) => i.code));
+    const errorTypes = new Set(issues.map(i => i.code));
 
     // Type-specific suggestions
     if (errorTypes.has('invalid_type')) {
-      suggestions.push('Check that all fields have the correct data type (string, number, boolean, etc.)');
+      suggestions.push(
+        'Check that all fields have the correct data type (string, number, boolean, etc.)'
+      );
     }
 
     if (errorTypes.has('too_small')) {
-      const stringFields = fieldErrors.filter((e) => e.error.includes('characters'));
+      const stringFields = fieldErrors.filter(e => e.error.includes('characters'));
       if (stringFields.length > 0) {
-        suggestions.push('Ensure required text fields are not empty and meet minimum length requirements');
+        suggestions.push(
+          'Ensure required text fields are not empty and meet minimum length requirements'
+        );
       }
 
-      const numberFields = fieldErrors.filter((e) => e.error.includes('at least') && !e.error.includes('characters'));
+      const numberFields = fieldErrors.filter(
+        e => e.error.includes('at least') && !e.error.includes('characters')
+      );
       if (numberFields.length > 0) {
         suggestions.push('Verify that numeric values meet minimum thresholds');
       }
     }
 
     if (errorTypes.has('too_big')) {
-      const promptErrors = fieldErrors.filter((e) => e.field === 'prompt');
+      const promptErrors = fieldErrors.filter(e => e.field === 'prompt');
       if (promptErrors.length > 0) {
-        suggestions.push('Consider reducing the prompt length or splitting it into smaller review requests');
+        suggestions.push(
+          'Consider reducing the prompt length or splitting it into smaller review requests'
+        );
       } else {
         suggestions.push('Reduce values to be within acceptable limits');
       }
     }
 
     if (errorTypes.has('invalid_enum_value')) {
-      suggestions.push('Use only the allowed values for enum fields as specified in the error messages');
+      suggestions.push(
+        'Use only the allowed values for enum fields as specified in the error messages'
+      );
     }
 
     // Field-specific suggestions
-    const fieldNames = fieldErrors.map((e) => e.field);
+    const fieldNames = fieldErrors.map(e => e.field);
 
-    if (fieldNames.some((f) => f.startsWith('options.timeout'))) {
+    if (fieldNames.some(f => f.startsWith('options.timeout'))) {
       suggestions.push('Timeout must be 0 (unlimited) or a positive number in milliseconds');
     }
 
-    if (fieldNames.some((f) => f.startsWith('options.cliPath'))) {
-      suggestions.push('CLI path must be a whitelisted executable or absolute path for security reasons');
-      suggestions.push('Commonly allowed paths: codex, gemini, /usr/local/bin/codex, /usr/local/bin/gemini');
+    if (fieldNames.some(f => f.startsWith('options.cliPath'))) {
+      suggestions.push(
+        'CLI path must be a whitelisted executable or absolute path for security reasons'
+      );
+      suggestions.push(
+        'Commonly allowed paths: codex, gemini, /usr/local/bin/codex, /usr/local/bin/gemini'
+      );
     }
 
     // Add examples for specific fields
-    fieldErrors.forEach((error) => {
+    fieldErrors.forEach(error => {
       const constraint = FIELD_CONSTRAINTS[error.field];
       if (constraint?.examples && constraint.examples.length > 0) {
         suggestions.push(`Valid ${error.field} examples: ${constraint.examples.join(', ')}`);
@@ -447,7 +551,7 @@ export class ValidationUtils {
     // Add field details if available
     if (error.fields.length > 0) {
       lines.push('Field Details:');
-      error.fields.forEach((field) => {
+      error.fields.forEach(field => {
         lines.push(`  - ${field.error}`);
         if (field.expectedFormat) {
           lines.push(`    Expected format: ${field.expectedFormat}`);
@@ -464,7 +568,7 @@ export class ValidationUtils {
     // Add suggestions
     if (error.suggestions.length > 0) {
       lines.push('Suggestions:');
-      error.suggestions.forEach((suggestion) => {
+      error.suggestions.forEach(suggestion => {
         lines.push(`  - ${suggestion}`);
       });
     }
@@ -476,9 +580,15 @@ export class ValidationUtils {
    * Sanitize input parameters and return warnings if modifications were made
    * ENHANCEMENT: Comprehensive sanitization including control characters, type coercion, and normalization
    */
-  static sanitizeParams<T extends Record<string, any>>(params: T): { sanitized: T; warnings: string[] } {
+  static sanitizeParams<T extends Record<string, unknown>>(
+    params: T
+  ): { sanitized: T; warnings: string[] } {
     const warnings: string[] = [];
-    const sanitized = { ...params };
+    const sanitized = { ...params } as T & {
+      prompt?: string;
+      reviewId?: string;
+      options?: Record<string, unknown>;
+    };
 
     // Sanitize prompt (trim, remove control characters)
     if (typeof params.prompt === 'string') {
@@ -499,7 +609,7 @@ export class ValidationUtils {
       }
 
       // Remove other dangerous control characters (but keep \n, \r, \t for code formatting)
-      const withoutControls = cleaned.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+      const withoutControls = this.stripControlCharacters(cleaned, { keepNewlinesAndTabs: true });
       if (withoutControls !== cleaned) {
         cleaned = withoutControls;
         warnings.push('Removed control characters from prompt');
@@ -519,7 +629,7 @@ export class ValidationUtils {
       }
 
       // Remove control characters from reviewId
-      const cleaned = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
+      const cleaned = this.stripControlCharacters(trimmed, { keepNewlinesAndTabs: false });
       if (cleaned !== trimmed) {
         sanitized.reviewId = cleaned;
         warnings.push('Removed control characters from reviewId');
@@ -527,14 +637,15 @@ export class ValidationUtils {
     }
 
     // Validate and sanitize options if present
-    if (params.options && typeof params.options === 'object') {
-      const sanitizedOptions = { ...sanitized.options };
+    const paramsOptions = params.options as Record<string, unknown> | undefined;
+    if (paramsOptions && typeof paramsOptions === 'object') {
+      const sanitizedOptions: Record<string, unknown> = { ...sanitized.options };
 
       // Ensure timeout is a valid finite number
-      if (params.options.timeout !== undefined) {
-        const timeout = Number(params.options.timeout);
+      if (paramsOptions.timeout !== undefined) {
+        const timeout = Number(paramsOptions.timeout);
         if (!isNaN(timeout) && isFinite(timeout)) {
-          if (timeout !== params.options.timeout) {
+          if (timeout !== paramsOptions.timeout) {
             sanitizedOptions.timeout = timeout;
             warnings.push(`Converted timeout to number: ${timeout}`);
           }
@@ -544,25 +655,27 @@ export class ValidationUtils {
       }
 
       // Sanitize cliPath (trim and remove control characters)
-      if (typeof params.options.cliPath === 'string') {
-        let cleaned = params.options.cliPath.trim();
+      if (typeof paramsOptions.cliPath === 'string') {
+        let cleaned = paramsOptions.cliPath.trim();
 
         // Remove control characters from cliPath (security)
-        const withoutControls = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
+        const withoutControls = this.stripControlCharacters(cleaned, {
+          keepNewlinesAndTabs: false,
+        });
         if (withoutControls !== cleaned) {
           cleaned = withoutControls;
           warnings.push('Removed control characters from cliPath');
         }
 
-        if (cleaned !== params.options.cliPath) {
+        if (cleaned !== paramsOptions.cliPath) {
           sanitizedOptions.cliPath = cleaned;
           warnings.push('Removed whitespace from cliPath');
         }
       }
 
       // Coerce boolean strings for parallelExecution
-      if (params.options.parallelExecution !== undefined) {
-        const value = params.options.parallelExecution;
+      if (paramsOptions.parallelExecution !== undefined) {
+        const value = paramsOptions.parallelExecution;
         if (typeof value === 'string') {
           if (value.toLowerCase() === 'true') {
             sanitizedOptions.parallelExecution = true;
@@ -575,8 +688,8 @@ export class ValidationUtils {
       }
 
       // Coerce boolean strings for includeIndividualReviews
-      if (params.options.includeIndividualReviews !== undefined) {
-        const value = params.options.includeIndividualReviews;
+      if (paramsOptions.includeIndividualReviews !== undefined) {
+        const value = paramsOptions.includeIndividualReviews;
         if (typeof value === 'string') {
           if (value.toLowerCase() === 'true') {
             sanitizedOptions.includeIndividualReviews = true;
@@ -589,10 +702,10 @@ export class ValidationUtils {
       }
 
       // Normalize severity casing
-      if (typeof params.options.severity === 'string') {
-        const normalized = params.options.severity.toLowerCase();
-        if (normalized !== params.options.severity) {
-          sanitizedOptions.severity = normalized as any;
+      if (typeof paramsOptions.severity === 'string') {
+        const normalized = paramsOptions.severity.toLowerCase();
+        if (normalized !== paramsOptions.severity) {
+          sanitizedOptions.severity = normalized;
           warnings.push(`Normalized severity to lowercase: '${normalized}'`);
         }
       }

@@ -140,8 +140,8 @@ describe('ValidationUtils', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.fields).toHaveLength(2);
-      expect(result.error?.fields.some((f) => f.field === 'options.timeout')).toBe(true);
-      expect(result.error?.fields.some((f) => f.field === 'options.severity')).toBe(true);
+      expect(result.error?.fields.some(f => f.field === 'options.timeout')).toBe(true);
+      expect(result.error?.fields.some(f => f.field === 'options.severity')).toBe(true);
     });
   });
 
@@ -200,7 +200,11 @@ describe('ValidationUtils', () => {
         expect(error).toBeInstanceOf(ValidationError);
         const validationError = error as ValidationError;
         expect(validationError.details).toBeDefined();
-        expect((validationError.details as any).validationDetails).toBeDefined();
+        const details = validationError.details;
+        if (typeof details !== 'object' || details === null) {
+          throw new Error('ValidationError.details should be an object');
+        }
+        expect((details as Record<string, unknown>).validationDetails).toBeDefined();
       }
     });
   });
@@ -223,7 +227,10 @@ describe('ValidationUtils', () => {
             constraint: 'Minimum 1000ms',
           },
         ],
-        suggestions: ['Ensure required text fields are not empty', 'Verify that numeric values meet minimum thresholds'],
+        suggestions: [
+          'Ensure required text fields are not empty',
+          'Verify that numeric values meet minimum thresholds',
+        ],
       };
 
       const formatted = ValidationUtils.formatErrorMessage(error);
@@ -297,7 +304,7 @@ describe('ValidationUtils', () => {
       const params = {
         prompt: 'test',
         options: {
-          timeout: '60000' as any,
+          timeout: '60000',
         },
       };
 
@@ -343,7 +350,7 @@ describe('ValidationUtils', () => {
       const params = {
         prompt: '  test\0prompt  ',
         options: {
-          timeout: '60000' as any,
+          timeout: '60000',
           cliPath: '  codex  ',
         },
       };
@@ -364,7 +371,7 @@ describe('ValidationUtils', () => {
         },
       };
 
-      const original = JSON.parse(JSON.stringify(params));
+      const original = structuredClone(params);
       ValidationUtils.sanitizeParams(params);
 
       expect(params).toEqual(original);

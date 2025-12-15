@@ -40,8 +40,8 @@ export class AnalysisAggregator {
     this.logger.info({ analysisCount: reviews.length }, 'Merging reviews');
 
     // Collect all findings with source information
-    const allFindings: FindingWithSource[] = reviews.flatMap((review) =>
-      review.findings.map((finding) => ({
+    const allFindings: FindingWithSource[] = reviews.flatMap(review =>
+      review.findings.map(finding => ({
         ...finding,
         source: review.source as 'codex' | 'gemini',
       }))
@@ -50,7 +50,7 @@ export class AnalysisAggregator {
     // CRITICAL FIX #4: Deduplicate findings with correct totalReviewers from reviews.length
     const deduplicated = this.config.deduplication?.enabled
       ? this.deduplicateFindings(allFindings, reviews.length)
-      : allFindings.map((f) => ({
+      : allFindings.map(f => ({
           ...f,
           sources: [f.source],
           confidence: 'medium' as Confidence,
@@ -86,18 +86,18 @@ export class AnalysisAggregator {
       recommendations,
       metadata: {
         language: reviews[0]?.metadata.language,
-        linesOfCode: reviews[0]?.metadata.linesOfCode || 0,
+        linesOfCode: reviews[0]?.metadata.linesOfCode ?? 0,
         analysisDuration: duration,
-        codexDuration: reviews.find((r) => r.source === 'codex')?.metadata.analysisDuration,
-        geminiDuration: reviews.find((r) => r.source === 'gemini')?.metadata.analysisDuration,
+        codexDuration: reviews.find(r => r.source === 'codex')?.metadata.analysisDuration,
+        geminiDuration: reviews.find(r => r.source === 'gemini')?.metadata.analysisDuration,
       },
     };
 
     // Include individual reviews if requested
     if (options?.includeIndividualAnalyses) {
       result.individualAnalyses = {
-        codex: reviews.find((r) => r.source === 'codex'),
-        gemini: reviews.find((r) => r.source === 'gemini'),
+        codex: reviews.find(r => r.source === 'codex'),
+        gemini: reviews.find(r => r.source === 'gemini'),
       };
     }
 
@@ -108,8 +108,11 @@ export class AnalysisAggregator {
    * Deduplicate findings by similarity matching
    * CRITICAL FIX #4: Pass total reviewers from reviews.length, not from findings
    */
-  private deduplicateFindings(findings: FindingWithSource[], totalReviewers: number): AggregatedFinding[] {
-    const threshold = this.config.deduplication?.similarityThreshold || 0.8;
+  private deduplicateFindings(
+    findings: FindingWithSource[],
+    totalReviewers: number
+  ): AggregatedFinding[] {
+    const threshold = this.config.deduplication?.similarityThreshold ?? 0.8;
     const deduplicated: AggregatedFinding[] = [];
     const processed = new Set<number>();
 
@@ -137,15 +140,20 @@ export class AnalysisAggregator {
       }
 
       // Mark similar findings as processed
-      similarIndices.forEach((idx) => processed.add(idx));
+      similarIndices.forEach(idx => processed.add(idx));
 
       // CRITICAL FIX #4: Determine confidence based on actual total reviewers
       // Use totalReviewers parameter, NOT derived from findings sources
       const confidence = this.determineConfidence(sources.length, totalReviewers);
 
       // Use highest severity among duplicates
-      const allSimilar = [current, ...similarIndices.map((idx) => findings[idx]).filter((f): f is FindingWithSource => f !== undefined)];
-      const highestSeverity = this.getHighestSeverity(allSimilar.map((f) => f.severity));
+      const allSimilar = [
+        current,
+        ...similarIndices
+          .map(idx => findings[idx])
+          .filter((f): f is FindingWithSource => f !== undefined),
+      ];
+      const highestSeverity = this.getHighestSeverity(allSimilar.map(f => f.severity));
 
       deduplicated.push({
         type: current.type,
@@ -218,7 +226,7 @@ export class AnalysisAggregator {
     const tokens1 = new Set(text1.toLowerCase().split(/\W+/).filter(Boolean));
     const tokens2 = new Set(text2.toLowerCase().split(/\W+/).filter(Boolean));
 
-    const intersection = new Set([...tokens1].filter((x) => tokens2.has(x)));
+    const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
     const union = new Set([...tokens1, ...tokens2]);
 
     if (union.size === 0) return 0;
@@ -259,15 +267,25 @@ export class AnalysisAggregator {
   /**
    * Calculate aggregated summary with consensus
    */
-  private calculateAggregatedSummary(findings: AggregatedFinding[], _reviewerCount: number) {
+  private calculateAggregatedSummary(
+    findings: AggregatedFinding[],
+    _reviewerCount: number
+  ): {
+    totalFindings: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    consensus: number;
+  } {
     const totalFindings = findings.length;
-    const critical = findings.filter((f) => f.severity === 'critical').length;
-    const high = findings.filter((f) => f.severity === 'high').length;
-    const medium = findings.filter((f) => f.severity === 'medium').length;
-    const low = findings.filter((f) => f.severity === 'low').length;
+    const critical = findings.filter(f => f.severity === 'critical').length;
+    const high = findings.filter(f => f.severity === 'high').length;
+    const medium = findings.filter(f => f.severity === 'medium').length;
+    const low = findings.filter(f => f.severity === 'low').length;
 
     // Calculate consensus (percentage of findings with high confidence)
-    const highConfidence = findings.filter((f) => f.confidence === 'high').length;
+    const highConfidence = findings.filter(f => f.confidence === 'high').length;
     const consensus = totalFindings > 0 ? Math.round((highConfidence / totalFindings) * 100) : 100;
 
     return {
@@ -287,8 +305,8 @@ export class AnalysisAggregator {
     reviews: AnalysisResult[],
     findings: AggregatedFinding[]
   ): string {
-    const critical = findings.filter((f) => f.severity === 'critical').length;
-    const high = findings.filter((f) => f.severity === 'high').length;
+    const critical = findings.filter(f => f.severity === 'critical').length;
+    const high = findings.filter(f => f.severity === 'high').length;
 
     let combined = `Combined review from ${reviews.length} reviewer(s): `;
 
@@ -305,7 +323,7 @@ export class AnalysisAggregator {
     }
 
     // Add reviewer agreement note
-    const highConfidence = findings.filter((f) => f.confidence === 'high').length;
+    const highConfidence = findings.filter(f => f.confidence === 'high').length;
     if (highConfidence > findings.length * 0.5) {
       combined += `Reviewers show strong agreement on most findings.`;
     }
@@ -317,9 +335,7 @@ export class AnalysisAggregator {
    * Merge recommendations from multiple reviews
    */
   private mergeRecommendations(reviews: AnalysisResult[]): string[] {
-    const allRecommendations = reviews
-      .flatMap((r) => r.recommendations || [])
-      .filter(Boolean);
+    const allRecommendations = reviews.flatMap(r => r.recommendations ?? []).filter(Boolean);
 
     if (allRecommendations.length === 0) {
       return [];

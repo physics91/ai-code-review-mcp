@@ -141,10 +141,7 @@ export class WarningSystem {
    */
   private isSuppressed(warningKey: keyof typeof WARNING_DEFINITIONS): boolean {
     const definition = WARNING_DEFINITIONS[warningKey];
-    return (
-      this.suppressions.has(warningKey) ||
-      this.suppressions.has(definition.code)
-    );
+    return this.suppressions.has(warningKey) || this.suppressions.has(definition.code);
   }
 
   /**
@@ -182,7 +179,7 @@ export class WarningSystem {
     tip?: string;
     field: string;
   }> {
-    return warnings.map((w) => ({
+    return warnings.map(w => ({
       code: w.code,
       severity: w.severity,
       message: w.message,

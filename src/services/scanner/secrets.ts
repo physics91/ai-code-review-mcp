@@ -52,7 +52,8 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
     pattern: /\b(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b/g,
     severity: 'critical',
     description: 'AWS Access Key ID detected in code',
-    recommendation: 'Use environment variables or AWS Secrets Manager. Never commit AWS credentials to version control.',
+    recommendation:
+      'Use environment variables or AWS Secrets Manager. Never commit AWS credentials to version control.',
     category: 'api_key',
   },
   {
@@ -60,7 +61,8 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
     pattern: /\b[A-Za-z0-9/+=]{40}\b(?=.*(?:aws|secret|key))/gi,
     severity: 'critical',
     description: 'Potential AWS Secret Access Key detected',
-    recommendation: 'Use environment variables or AWS Secrets Manager. Rotate this key immediately if exposed.',
+    recommendation:
+      'Use environment variables or AWS Secrets Manager. Rotate this key immediately if exposed.',
     category: 'api_key',
   },
   {
@@ -78,7 +80,8 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
     pattern: /ghp_[a-zA-Z0-9]{36}/g,
     severity: 'critical',
     description: 'GitHub Personal Access Token detected',
-    recommendation: 'Use GitHub Actions secrets or environment variables. Revoke and regenerate this token.',
+    recommendation:
+      'Use GitHub Actions secrets or environment variables. Revoke and regenerate this token.',
     category: 'token',
   },
   {
@@ -156,7 +159,8 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
     pattern: /(?:sk|pk)_(?:live|test)_[0-9a-zA-Z]{24,}/g,
     severity: 'critical',
     description: 'Stripe API Key detected',
-    recommendation: 'Use environment variables for Stripe keys. Rotate live keys immediately if exposed.',
+    recommendation:
+      'Use environment variables for Stripe keys. Rotate live keys immediately if exposed.',
     category: 'api_key',
   },
   {
@@ -187,7 +191,8 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
   },
   {
     name: 'Slack Webhook URL',
-    pattern: /https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]+\/B[a-zA-Z0-9_]+\/[a-zA-Z0-9_]+/g,
+    pattern:
+      /https:\/\/hooks\.slack\.com\/services\/T[a-zA-Z0-9_]+\/B[a-zA-Z0-9_]+\/[a-zA-Z0-9_]+/g,
     severity: 'medium',
     description: 'Slack Webhook URL detected',
     recommendation: 'Store webhook URLs in environment variables.',
@@ -268,12 +273,13 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
     pattern: /eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/g,
     severity: 'high',
     description: 'JSON Web Token (JWT) detected',
-    recommendation: 'JWTs should be generated dynamically, not hardcoded. Check if this is a test token.',
+    recommendation:
+      'JWTs should be generated dynamically, not hardcoded. Check if this is a test token.',
     category: 'token',
   },
   {
     name: 'Bearer Token',
-    pattern: /(?:bearer|authorization)\s*[:=]\s*['"][a-zA-Z0-9_\-.]+['"]/gi,
+    pattern: /(?:bearer|authorization)\s*[:=]\s*['"][a-zA-Z0-9_.-]+['"]/gi,
     severity: 'high',
     description: 'Bearer/Authorization token detected',
     recommendation: 'Use environment variables for authentication tokens.',
@@ -283,7 +289,7 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
   // Generic Patterns
   {
     name: 'Generic API Key',
-    pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*['"][a-zA-Z0-9_\-]{16,}['"]/gi,
+    pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*['"][a-zA-Z0-9_-]{16,}['"]/gi,
     severity: 'high',
     description: 'Generic API key pattern detected',
     recommendation: 'Store API keys in environment variables or secret management systems.',
@@ -299,7 +305,7 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
   },
   {
     name: 'Generic Token',
-    pattern: /(?:access[_-]?token|auth[_-]?token)\s*[:=]\s*['"][a-zA-Z0-9_\-]{16,}['"]/gi,
+    pattern: /(?:access[_-]?token|auth[_-]?token)\s*[:=]\s*['"][a-zA-Z0-9_-]{16,}['"]/gi,
     severity: 'high',
     description: 'Hardcoded access/auth token detected',
     recommendation: 'Store tokens in secure configuration or use OAuth flows.',
@@ -325,7 +331,7 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
   },
   {
     name: 'Twilio Account SID',
-    pattern: /AC[a-zA-Z0-9_\-]{32}/g,
+    pattern: /AC[a-zA-Z0-9_-]{32}/g,
     severity: 'medium',
     description: 'Twilio Account SID detected',
     recommendation: 'While less sensitive, consider using environment variables.',
@@ -335,7 +341,7 @@ const DEFAULT_PATTERNS: SecretPattern[] = [
   // SendGrid
   {
     name: 'SendGrid API Key',
-    pattern: /SG\.[a-zA-Z0-9_\-]{22}\.[a-zA-Z0-9_\-]{43}/g,
+    pattern: /SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g,
     severity: 'high',
     description: 'SendGrid API Key detected',
     recommendation: 'Store SendGrid keys in environment variables.',
@@ -441,7 +447,7 @@ export class SecretScanner {
     private logger: Logger
   ) {
     this.patterns = this.initializePatterns();
-    this.excludeRegexes = this.initializeExcludePatterns(config.excludePatterns || []);
+    this.excludeRegexes = this.initializeExcludePatterns(config.excludePatterns ?? []);
   }
 
   /**
@@ -469,7 +475,7 @@ export class SecretScanner {
    */
   private initializePatterns(): SecretPattern[] {
     const patterns: SecretPattern[] = [];
-    const patternConfig = this.config.patterns || {
+    const patternConfig = this.config.patterns ?? {
       aws: true,
       gcp: true,
       azure: true,
@@ -523,7 +529,11 @@ export class SecretScanner {
     const name = pattern.name.toLowerCase();
 
     if (name.includes('aws') && !config.aws) return false;
-    if ((name.includes('google') || name.includes('gcp') || name.includes('firebase')) && !config.gcp) return false;
+    if (
+      (name.includes('google') || name.includes('gcp') || name.includes('firebase')) &&
+      !config.gcp
+    )
+      return false;
     if (name.includes('azure') && !config.azure) return false;
     if (name.includes('github') && !config.github) return false;
     if (pattern.category === 'connection_string' && !config.database) return false;
@@ -532,15 +542,15 @@ export class SecretScanner {
     // Generic patterns
     if (
       (name.includes('generic') ||
-       name.includes('jwt') ||
-       name.includes('bearer') ||
-       name.includes('slack') ||
-       name.includes('stripe') ||
-       name.includes('twilio') ||
-       name.includes('sendgrid') ||
-       name.includes('npm') ||
-       name.includes('discord') ||
-       name.includes('telegram')) &&
+        name.includes('jwt') ||
+        name.includes('bearer') ||
+        name.includes('slack') ||
+        name.includes('stripe') ||
+        name.includes('twilio') ||
+        name.includes('sendgrid') ||
+        name.includes('npm') ||
+        name.includes('discord') ||
+        name.includes('telegram')) &&
       !config.generic
     ) {
       return false;
@@ -633,10 +643,7 @@ export class SecretScanner {
       }
     }
 
-    this.logger.info(
-      { findingCount: findings.length, fileName },
-      'Secret scanning completed'
-    );
+    this.logger.info({ findingCount: findings.length, fileName }, 'Secret scanning completed');
 
     return findings;
   }
@@ -705,7 +712,7 @@ export class SecretScanner {
     // Skip Heroku-like UUID if it's not in a sensitive context
     if (pattern.name === 'Heroku API Key') {
       const sensitiveContext = ['heroku', 'api', 'key', 'token', 'secret', 'auth'];
-      const hasContext = sensitiveContext.some((ctx) => lowerLine.includes(ctx));
+      const hasContext = sensitiveContext.some(ctx => lowerLine.includes(ctx));
       if (!hasContext) {
         return true;
       }
@@ -743,7 +750,7 @@ export class SecretScanner {
     }
 
     return secretFindings
-      .filter((finding) => {
+      .filter(finding => {
         // Validate required fields - log only non-sensitive metadata
         if (!finding || typeof finding !== 'object') {
           this.logger.warn('Invalid finding object (not an object), skipping');
@@ -754,7 +761,7 @@ export class SecretScanner {
             {
               secretType: finding.secretType || 'unknown',
               severity: finding.severity || 'unknown',
-              line: finding.line
+              line: finding.line,
             },
             'Finding missing required fields, skipping'
           );
@@ -762,13 +769,14 @@ export class SecretScanner {
         }
         return true;
       })
-      .map((finding) => ({
+      .map(finding => ({
         type: 'security' as const,
         severity: finding.severity,
         line: finding.line,
         title: `Hardcoded ${finding.secretType}`,
         description: `${finding.description || 'Secret detected'}\n\nDetected value: \`${finding.match || '***'}\` at column ${finding.column || 1}`,
-        suggestion: finding.recommendation || 'Remove hardcoded secret and use environment variables',
+        suggestion:
+          finding.recommendation || 'Remove hardcoded secret and use environment variables',
       }));
   }
 
@@ -776,7 +784,7 @@ export class SecretScanner {
    * Get scanner statistics
    */
   getStats(): { patternCount: number; categories: string[] } {
-    const categories = [...new Set(this.patterns.map((p) => p.category))];
+    const categories = [...new Set(this.patterns.map(p => p.category))];
     return {
       patternCount: this.patterns.length,
       categories,

@@ -48,7 +48,16 @@ export class MCPToolError extends BaseError {
   public readonly fatal: boolean;
   public readonly retryable: boolean;
 
-  constructor(message: string, details?: { fatal?: boolean; retryable?: boolean; cause?: unknown; result?: unknown; [key: string]: unknown }) {
+  constructor(
+    message: string,
+    details?: {
+      fatal?: boolean;
+      retryable?: boolean;
+      cause?: unknown;
+      result?: unknown;
+      [key: string]: unknown;
+    }
+  ) {
     super(message, ErrorCode.MCP_TOOL_ERROR, details);
     this.fatal = details?.fatal ?? false;
     this.retryable = details?.retryable ?? false;

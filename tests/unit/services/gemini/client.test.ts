@@ -140,7 +140,7 @@ describe('GeminiAnalysisService', () => {
         expect(result.findings[0].severity).toBe('critical');
       });
 
-      it('should handle Gemini wrapper with error field', async () => {
+      it('should handle Gemini wrapper with error field by returning rawOutput', async () => {
         const mockOutput = JSON.stringify({
           response: null,
           stats: null,
@@ -153,14 +153,16 @@ describe('GeminiAnalysisService', () => {
           exitCode: 0,
         } as any);
 
-        await expect(
-          service.analyzeCode({
-            prompt: 'Review this code',
-          })
-        ).rejects.toThrow('Gemini CLI error: Model quota exceeded');
+        const result = await service.analyzeCode({
+          prompt: 'Review this code',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
+        expect(result.overallAssessment).toContain('Model quota exceeded');
       });
 
-      it('should handle Gemini wrapper with null response', async () => {
+      it('should handle Gemini wrapper with null response by returning rawOutput', async () => {
         const mockOutput = JSON.stringify({
           response: null,
           stats: { session: { duration: 0 } },
@@ -173,11 +175,13 @@ describe('GeminiAnalysisService', () => {
           exitCode: 0,
         } as any);
 
-        await expect(
-          service.analyzeCode({
-            prompt: 'Review this code',
-          })
-        ).rejects.toThrow('Gemini response is null');
+        const result = await service.analyzeCode({
+          prompt: 'Review this code',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
+        expect(result.overallAssessment).toContain('null');
       });
     });
 
@@ -225,7 +229,8 @@ describe('GeminiAnalysisService', () => {
         expect(result.overallAssessment).toBe('Clean');
       });
 
-      it('should handle mixed text and JSON in response', async () => {
+      it('should return rawOutput when response contains mixed text and code blocks', async () => {
+        // Simplified parser does not extract JSON from mixed content
         const mockOutput = JSON.stringify({
           response: 'Here is the analysis:\n\n```json\n{"findings":[],"overallAssessment":"Good","recommendations":[]}\n```\n\nLet me know if you have questions.',
           stats: { session: { duration: 100 } },
@@ -242,7 +247,9 @@ describe('GeminiAnalysisService', () => {
           prompt: 'Review this code',
         });
 
-        expect(result.success).toBe(true);
+        // Simplified parser cannot extract JSON from mixed content
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
       });
     });
 
@@ -279,35 +286,38 @@ describe('GeminiAnalysisService', () => {
     });
 
     describe('Error handling', () => {
-      it('should throw ParseError for invalid JSON', async () => {
+      it('should return rawOutput for invalid JSON', async () => {
         vi.mocked(execa).mockResolvedValue({
           stdout: 'This is not JSON at all',
           stderr: '',
           exitCode: 0,
         } as any);
 
-        await expect(
-          service.analyzeCode({
-            prompt: 'Review this code',
-          })
-        ).rejects.toThrow('No JSON found in Gemini output');
+        const result = await service.analyzeCode({
+          prompt: 'Review this code',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
+        expect(result.rawOutput).toContain('This is not JSON at all');
       });
 
-      it('should throw ParseError for empty output', async () => {
+      it('should return rawOutput for empty output', async () => {
         vi.mocked(execa).mockResolvedValue({
           stdout: '',
           stderr: '',
           exitCode: 0,
         } as any);
 
-        await expect(
-          service.analyzeCode({
-            prompt: 'Review this code',
-          })
-        ).rejects.toThrow();
+        const result = await service.analyzeCode({
+          prompt: 'Review this code',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
       });
 
-      it('should throw ParseError for malformed JSON in response', async () => {
+      it('should return rawOutput for malformed JSON in response', async () => {
         const mockOutput = JSON.stringify({
           response: '{"findings": [invalid json here}',
           stats: { session: { duration: 100 } },
@@ -320,11 +330,12 @@ describe('GeminiAnalysisService', () => {
           exitCode: 0,
         } as any);
 
-        await expect(
-          service.analyzeCode({
-            prompt: 'Review this code',
-          })
-        ).rejects.toThrow();
+        const result = await service.analyzeCode({
+          prompt: 'Review this code',
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
       });
 
       it('should validate input parameters', async () => {
@@ -435,8 +446,9 @@ describe('GeminiAnalysisService', () => {
       });
     });
 
-    describe('JSONL format (future compatibility)', () => {
-      it('should parse JSONL format with response in one line', async () => {
+    describe('JSONL format (not supported in simplified parser)', () => {
+      it('should return rawOutput for JSONL format (not supported)', async () => {
+        // Simplified parser does not support JSONL format
         const mockOutput = [
           '{"type": "status", "message": "Processing..."}',
           JSON.stringify({
@@ -460,7 +472,9 @@ describe('GeminiAnalysisService', () => {
           prompt: 'Review this code',
         });
 
-        expect(result.success).toBe(true);
+        // Simplified parser treats this as invalid JSON
+        expect(result.success).toBe(false);
+        expect(result.rawOutput).toBeDefined();
       });
     });
   });

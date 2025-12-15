@@ -22,15 +22,17 @@ export class ConfigManager {
    */
   static async load(): Promise<ServerConfig> {
     try {
-      // Start with default config (cast to any first to avoid type issues with JSON import)
-      let config: Partial<ServerConfig> = { ...(defaultConfig as any) };
+      // Start with validated default config to keep types safe
+      const baseConfig = ServerConfigSchema.parse(defaultConfig);
+      let config: Partial<ServerConfig> = { ...baseConfig };
 
       // Try to load from config file
       const explorer = cosmiconfig('code-review-mcp');
       const result = await explorer.search();
 
-      if (result?.config) {
-        config = this.mergeConfig(config, result.config);
+      const fileConfig = result?.config as unknown;
+      if (fileConfig && typeof fileConfig === 'object' && fileConfig !== null) {
+        config = this.mergeConfig(config, fileConfig as Partial<ServerConfig>);
       }
 
       // Override with environment variables
@@ -56,7 +58,9 @@ export class ConfigManager {
    */
   static get(): ServerConfig {
     if (!ConfigManager.instance) {
-      throw new ConfigurationError('Configuration not initialized. Call ConfigManager.load() first');
+      throw new ConfigurationError(
+        'Configuration not initialized. Call ConfigManager.load() first'
+      );
     }
     return ConfigManager.instance.config;
   }
@@ -64,26 +68,29 @@ export class ConfigManager {
   /**
    * Merge two configuration objects
    */
-  private static mergeConfig(base: Partial<ServerConfig>, override: Partial<ServerConfig>): Partial<ServerConfig> {
+  private static mergeConfig(
+    base: Partial<ServerConfig>,
+    override: Partial<ServerConfig>
+  ): Partial<ServerConfig> {
     const result: Partial<ServerConfig> = {};
 
     // Merge server
-    if (base.server || override.server) {
+    if (base.server ?? override.server) {
       result.server = { ...base.server, ...override.server } as ServerConfig['server'];
     }
 
     // Merge codex
-    if (base.codex || override.codex) {
+    if (base.codex ?? override.codex) {
       result.codex = { ...base.codex, ...override.codex } as ServerConfig['codex'];
     }
 
     // Merge gemini
-    if (base.gemini || override.gemini) {
+    if (base.gemini ?? override.gemini) {
       result.gemini = { ...base.gemini, ...override.gemini } as ServerConfig['gemini'];
     }
 
     // Merge analysis
-    if (base.analysis || override.analysis) {
+    if (base.analysis ?? override.analysis) {
       result.analysis = {
         ...base.analysis,
         ...override.analysis,
@@ -95,12 +102,12 @@ export class ConfigManager {
     }
 
     // Merge retry
-    if (base.retry || override.retry) {
+    if (base.retry ?? override.retry) {
       result.retry = { ...base.retry, ...override.retry } as ServerConfig['retry'];
     }
 
     // Merge logging
-    if (base.logging || override.logging) {
+    if (base.logging ?? override.logging) {
       result.logging = {
         ...base.logging,
         ...override.logging,
@@ -112,12 +119,12 @@ export class ConfigManager {
     }
 
     // Merge cache
-    if (base.cache || override.cache) {
+    if (base.cache ?? override.cache) {
       result.cache = { ...base.cache, ...override.cache } as ServerConfig['cache'];
     }
 
     // Merge secretScanning
-    if (base.secretScanning || override.secretScanning) {
+    if (base.secretScanning ?? override.secretScanning) {
       result.secretScanning = {
         ...base.secretScanning,
         ...override.secretScanning,
@@ -129,7 +136,7 @@ export class ConfigManager {
     }
 
     // Merge context
-    if (base.context || override.context) {
+    if (base.context ?? override.context) {
       result.context = {
         ...base.context,
         ...override.context,
@@ -145,7 +152,7 @@ export class ConfigManager {
     }
 
     // Merge prompts
-    if (base.prompts || override.prompts) {
+    if (base.prompts ?? override.prompts) {
       result.prompts = {
         ...base.prompts,
         ...override.prompts,
@@ -157,7 +164,7 @@ export class ConfigManager {
     }
 
     // Merge warnings
-    if (base.warnings || override.warnings) {
+    if (base.warnings ?? override.warnings) {
       result.warnings = {
         ...base.warnings,
         ...override.warnings,
@@ -204,9 +211,14 @@ export class ConfigManager {
         result.codex.search = env.CODEX_SEARCH === 'true';
       }
       if (env.CODEX_REASONING_EFFORT) {
-        const validEfforts = ['minimal', 'low', 'medium', 'high'];
+        const validEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
         if (validEfforts.includes(env.CODEX_REASONING_EFFORT)) {
-          result.codex.reasoningEffort = env.CODEX_REASONING_EFFORT as 'minimal' | 'low' | 'medium' | 'high';
+          result.codex.reasoningEffort = env.CODEX_REASONING_EFFORT as
+            | 'minimal'
+            | 'low'
+            | 'medium'
+            | 'high'
+            | 'xhigh';
         }
         // Invalid values are silently ignored, schema default will be used
       }

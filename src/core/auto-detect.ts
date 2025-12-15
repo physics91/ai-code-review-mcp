@@ -3,11 +3,12 @@
  * Automatically detects language, framework, platform from various sources
  */
 
-import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, extname } from 'path';
+import { readFile } from 'fs/promises';
+import { extname, join } from 'path';
 
 import type { AnalysisContext, Scope } from '../schemas/context.js';
+
 import type { Logger } from './logger.js';
 
 export interface DetectionResult {
@@ -124,7 +125,7 @@ export class ContextAutoDetector {
         if (pkgInfo) {
           // Only override if not already set or higher confidence
           const pkgLangConfidence = pkgInfo.confidence.language ?? 0;
-          if (!result.context.language || pkgLangConfidence > (result.confidence.language || 0)) {
+          if (!result.context.language || pkgLangConfidence > (result.confidence.language ?? 0)) {
             if (pkgInfo.context.language) {
               result.context.language = pkgInfo.context.language;
               result.confidence.language = pkgLangConfidence;
@@ -176,7 +177,7 @@ export class ContextAutoDetector {
    */
   private detectLanguageFromExtension(fileName: string): string | null {
     const ext = extname(fileName).toLowerCase();
-    return EXTENSION_LANGUAGE_MAP[ext] || null;
+    return EXTENSION_LANGUAGE_MAP[ext] ?? null;
   }
 
   /**
@@ -193,7 +194,12 @@ export class ContextAutoDetector {
 
     try {
       const content = await readFile(pkgPath, 'utf-8');
-      const pkg = JSON.parse(content);
+      const parsed: unknown = JSON.parse(content);
+      if (typeof parsed !== 'object' || parsed === null) {
+        return null;
+      }
+
+      const pkg = parsed as Record<string, unknown>;
       const context: Partial<AnalysisContext> = {};
       const confidence: Record<string, number> = {};
 
@@ -202,19 +208,28 @@ export class ContextAutoDetector {
       confidence.language = 0.8;
 
       // Check for TypeScript
-      const allDeps = {
-        ...pkg.dependencies,
-        ...pkg.devDependencies,
+      const dependencies =
+        typeof pkg.dependencies === 'object' && pkg.dependencies !== null
+          ? (pkg.dependencies as Record<string, unknown>)
+          : {};
+      const devDependencies =
+        typeof pkg.devDependencies === 'object' && pkg.devDependencies !== null
+          ? (pkg.devDependencies as Record<string, unknown>)
+          : {};
+
+      const allDeps: Record<string, unknown> = {
+        ...dependencies,
+        ...devDependencies,
       };
 
-      if (allDeps.typescript) {
+      if (typeof allDeps.typescript === 'string') {
         context.language = 'typescript';
         confidence.language = 0.95;
       }
 
       // Detect framework
       for (const [dep, framework] of Object.entries(FRAMEWORK_DETECTION_MAP)) {
-        if (allDeps[dep]) {
+        if (typeof allDeps[dep] === 'string') {
           context.framework = framework;
           confidence.framework = 0.9;
           break; // Use first match
@@ -240,7 +255,8 @@ export class ContextAutoDetector {
     const hasRequire = /^(const|let|var)\s+.*=\s*require\(/m.test(trimmedCode);
     const hasExports = /^export\s/m.test(trimmedCode);
     const hasModuleExports = /module\.exports\s*=/m.test(trimmedCode);
-    const hasMainFunction = /^(async\s+)?function\s+main|^const\s+main\s*=|^async\s+function\s*\(/m.test(trimmedCode);
+    const hasMainFunction =
+      /^(async\s+)?function\s+main|^const\s+main\s*=|^async\s+function\s*\(/m.test(trimmedCode);
     const hasClassDefinition = /^(export\s+)?(class|interface|type|enum)\s+\w+/m.test(trimmedCode);
 
     // Full file indicators

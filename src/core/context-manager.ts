@@ -5,8 +5,8 @@
  * Priority order: defaults -> activePreset -> detectedContext -> requestContext
  */
 
-import type { AnalysisContext } from '../schemas/context.js';
 import type { ServerConfig } from '../schemas/config.js';
+import type { AnalysisContext } from '../schemas/context.js';
 
 export interface ContextConfig {
   defaults?: AnalysisContext;
@@ -26,9 +26,9 @@ export class ContextManager {
   private activePreset: string | null;
 
   constructor(config: ContextConfig) {
-    this.defaults = config.defaults || {};
-    this.presets = new Map(Object.entries(config.presets || {}));
-    this.activePreset = config.activePreset || null;
+    this.defaults = config.defaults ?? {};
+    this.presets = new Map(Object.entries(config.presets ?? {}));
+    this.activePreset = config.activePreset ?? null;
   }
 
   /**
@@ -78,7 +78,7 @@ export class ContextManager {
     }
 
     // Deep merge custom fields
-    if (base.custom || override.custom) {
+    if (base.custom ?? override.custom) {
       result.custom = {
         ...base.custom,
         ...override.custom,

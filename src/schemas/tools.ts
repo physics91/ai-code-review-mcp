@@ -72,13 +72,70 @@ export const AnalysisMetadataSchema = z.object({
   autoDetected: z.boolean().optional(),
 });
 
+const CodeAnalysisOptionsSchema = z
+  .object({
+    timeout: z
+      .number({
+        invalid_type_error: 'Timeout must be a number (milliseconds)',
+      })
+      .min(0, {
+        message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
+      })
+      .optional() // 0 = unlimited, defaults handled in service
+      .describe('Execution timeout in milliseconds (0 = unlimited)'),
+    severity: z
+      .enum(['all', 'high', 'medium'], {
+        errorMap: () => ({
+          message:
+            "Severity must be one of: 'all' (all findings), 'high' (critical + high), or 'medium' (critical + high + medium)",
+        }),
+      })
+      .optional(), // defaults to 'all' in service
+    cliPath: z
+      .string({
+        invalid_type_error: 'CLI path must be a string',
+      })
+      .min(1, {
+        message: 'CLI path cannot be empty if provided',
+      })
+      .optional()
+      .describe('Custom CLI executable path (must be whitelisted for security)'),
+
+    // New context-related options
+    template: z
+      .string()
+      .optional()
+      .describe('Prompt template ID to use (e.g., default, security-focused)'),
+    preset: z
+      .string()
+      .optional()
+      .describe('Context preset name to apply (e.g., react-web, nodejs-api, mcp-server)'),
+    autoDetect: z
+      .boolean()
+      .optional() // defaults to true in service
+      .describe('Enable auto-detection of language, framework, platform'),
+    warnOnMissingContext: z
+      .boolean()
+      .optional() // defaults to true in service
+      .describe('Show warnings when important context is missing'),
+  })
+  .optional();
+
+type CodeAnalysisParamsSchemaType = z.ZodObject<{
+  prompt: z.ZodString;
+  context: z.ZodOptional<typeof AnalysisContextSchema>;
+  options: typeof CodeAnalysisOptionsSchema;
+}>;
+
 /**
  * Create Code Analysis Params Schema with configurable max prompt length
  * Simplified to accept a single prompt parameter instead of structured code/context
  * Enhanced with detailed error messages for better UX
  */
-export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000) {
-  return z.object({
+export const createCodeAnalysisParamsSchema = (
+  maxPromptLength: number = 100000
+): CodeAnalysisParamsSchemaType =>
+  z.object({
     prompt: z
       .string({
         required_error: 'Prompt is required',
@@ -97,55 +154,8 @@ export function createCodeAnalysisParamsSchema(maxPromptLength: number = 100000)
       'Analysis context (threatModel, platform, projectType, language, framework, scope) for more accurate findings'
     ),
 
-    options: z
-      .object({
-        timeout: z
-          .number({
-            invalid_type_error: 'Timeout must be a number (milliseconds)',
-          })
-          .min(0, {
-            message: 'Timeout must be 0 (unlimited) or a positive number in milliseconds',
-          })
-          .optional() // 0 = unlimited, defaults handled in service
-          .describe('Execution timeout in milliseconds (0 = unlimited)'),
-        severity: z
-          .enum(['all', 'high', 'medium'], {
-            errorMap: () => ({
-              message: "Severity must be one of: 'all' (all findings), 'high' (critical + high), or 'medium' (critical + high + medium)",
-            }),
-          })
-          .optional(), // defaults to 'all' in service
-        cliPath: z
-          .string({
-            invalid_type_error: 'CLI path must be a string',
-          })
-          .min(1, {
-            message: 'CLI path cannot be empty if provided',
-          })
-          .optional()
-          .describe('Custom CLI executable path (must be whitelisted for security)'),
-
-        // New context-related options
-        template: z
-          .string()
-          .optional()
-          .describe('Prompt template ID to use (e.g., default, security-focused)'),
-        preset: z
-          .string()
-          .optional()
-          .describe('Context preset name to apply (e.g., react-web, nodejs-api, mcp-server)'),
-        autoDetect: z
-          .boolean()
-          .optional() // defaults to true in service
-          .describe('Enable auto-detection of language, framework, platform'),
-        warnOnMissingContext: z
-          .boolean()
-          .optional() // defaults to true in service
-          .describe('Show warnings when important context is missing'),
-      })
-      .optional(),
+    options: CodeAnalysisOptionsSchema,
   });
-}
 
 // Default schema with 100000 max length
 export const CodeAnalysisParamsSchema = createCodeAnalysisParamsSchema(100000);
@@ -160,7 +170,8 @@ export const CombinedAnalysisInputSchema = z.object({
       message: 'Prompt cannot be empty - please provide code or instructions to analyze',
     })
     .max(100000, {
-      message: 'Prompt exceeds maximum length of 100000 characters. Consider splitting into smaller analyses.',
+      message:
+        'Prompt exceeds maximum length of 100000 characters. Consider splitting into smaller analyses.',
     })
     .describe('Prompt for code analysis'),
 
@@ -198,17 +209,13 @@ export const CombinedAnalysisInputSchema = z.object({
           invalid_type_error: 'includeIndividualAnalyses must be a boolean (true or false)',
         })
         .optional() // defaults to false in service
-        .describe('Include individual analysis results from Codex and Gemini in the combined output'),
+        .describe(
+          'Include individual analysis results from Codex and Gemini in the combined output'
+        ),
 
       // New context-related options
-      template: z
-        .string()
-        .optional()
-        .describe('Prompt template ID to use'),
-      preset: z
-        .string()
-        .optional()
-        .describe('Context preset name to apply'),
+      template: z.string().optional().describe('Prompt template ID to use'),
+      preset: z.string().optional().describe('Context preset name to apply'),
       autoDetect: z
         .boolean()
         .optional() // defaults to true in service
@@ -232,6 +239,7 @@ export const AnalysisResultSchema = z.object({
   overallAssessment: z.string(),
   recommendations: z.array(z.string()).optional(),
   metadata: AnalysisMetadataSchema,
+  rawOutput: z.string().optional(),
 });
 
 export const AggregatedFindingSchema = AnalysisFindingSchema.extend({

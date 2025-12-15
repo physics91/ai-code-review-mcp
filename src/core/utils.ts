@@ -100,3 +100,35 @@ export function createTimeoutPromise<T>(ms: number): Promise<T> {
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, createTimeoutPromise<T>(ms)]);
 }
+
+/**
+ * Remove ANSI escape codes from CLI output
+ */
+export function stripAnsiCodes(value: string): string {
+  let result = '';
+
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+
+    // ESC [
+    if (code === 27 && value[i + 1] === '[') {
+      i += 2;
+
+      // Consume CSI parameters until a final letter (A-Z / a-z)
+      for (; i < value.length; i++) {
+        const finalCode = value.charCodeAt(i);
+        const isAlpha =
+          (finalCode >= 65 && finalCode <= 90) || (finalCode >= 97 && finalCode <= 122);
+        if (isAlpha) {
+          break;
+        }
+      }
+
+      continue;
+    }
+
+    result += value[i] ?? '';
+  }
+
+  return result;
+}
