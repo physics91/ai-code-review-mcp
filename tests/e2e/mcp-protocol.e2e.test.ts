@@ -24,6 +24,7 @@ import { ToolRegistry } from '../../src/tools/registry.js';
 import { CodexAnalysisService } from '../../src/services/codex/client.js';
 import { GeminiAnalysisService } from '../../src/services/gemini/client.js';
 import { AnalysisAggregator } from '../../src/services/aggregator/merger.js';
+import { PromptRegistry } from '../../src/prompts/registry.js';
 import type { ServerConfig } from '../../src/schemas/config.js';
 
 // Mock execa for CLI execution
@@ -226,6 +227,10 @@ describe('E2E: MCP Protocol Communication', () => {
       config: testConfig,
     });
     registry.registerTools();
+
+    // Register prompts with PromptRegistry
+    const promptRegistry = new PromptRegistry(server, { enabled: true }, mockLogger);
+    promptRegistry.registerPrompts();
 
     // Create in-memory transport pair
     transport = InMemoryTransport.createLinkedPair();
@@ -855,6 +860,107 @@ describe('E2E: MCP Protocol Communication', () => {
 
       // Verify concurrency was limited (should not exceed maxConcurrent: 2)
       expect(maxObservedConcurrent).toBeLessThanOrEqual(testConfig.codex.maxConcurrent);
+    });
+  });
+
+  describe('8. MCP Prompts', () => {
+    it('should list all registered prompts', async () => {
+      const result = await client.listPrompts();
+
+      expect(result.prompts).toBeDefined();
+      expect(Array.isArray(result.prompts)).toBe(true);
+
+      // Expected prompts
+      const promptNames = result.prompts.map(p => p.name);
+      expect(promptNames).toContain('security-review');
+      expect(promptNames).toContain('performance-review');
+      expect(promptNames).toContain('style-review');
+      expect(promptNames).toContain('general-review');
+      expect(promptNames).toContain('bug-detection');
+    });
+
+    it('should have valid arguments schema for prompts', async () => {
+      const result = await client.listPrompts();
+
+      for (const prompt of result.prompts) {
+        // All prompts should have arguments defined
+        expect(prompt.arguments).toBeDefined();
+        expect(Array.isArray(prompt.arguments)).toBe(true);
+
+        // All prompts should have 'code' argument
+        const codeArg = prompt.arguments!.find(a => a.name === 'code');
+        expect(codeArg).toBeDefined();
+        expect(codeArg!.required).toBe(true);
+      }
+    });
+
+    it('should get security-review prompt with arguments', async () => {
+      const result = await client.getPrompt({
+        name: 'security-review',
+        arguments: {
+          code: 'const password = "secret123";',
+          language: 'javascript',
+          threatModel: 'public-api',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages[0].role).toBe('user');
+
+      const content = result.messages[0].content as { type: string; text: string };
+      expect(content.type).toBe('text');
+      expect(content.text).toContain('password');
+      expect(content.text.toLowerCase()).toContain('security');
+    });
+
+    it('should get performance-review prompt', async () => {
+      const result = await client.getPrompt({
+        name: 'performance-review',
+        arguments: {
+          code: 'for (let i = 0; i < arr.length; i++) { console.log(arr[i]); }',
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+      expect(result.messages[0].role).toBe('user');
+
+      const content = result.messages[0].content as { type: string; text: string };
+      expect(content.text.toLowerCase()).toContain('performance');
+    });
+
+    it('should get general-review prompt with focus areas', async () => {
+      const result = await client.getPrompt({
+        name: 'general-review',
+        arguments: {
+          code: 'function test() { return 42; }',
+          focus: 'security, performance',  // MCP protocol requires string arguments
+        },
+      });
+
+      expect(result.messages).toBeDefined();
+      const content = result.messages[0].content as { type: string; text: string };
+      expect(content.text).toBeDefined();
+      expect(content.text.toLowerCase()).toContain('security');
+      expect(content.text.toLowerCase()).toContain('performance');
+    });
+
+    it('should return error for non-existent prompt', async () => {
+      await expect(
+        client.getPrompt({
+          name: 'non-existent-prompt',
+          arguments: { code: 'test' },
+        })
+      ).rejects.toThrow();
+    });
+
+    it('should return error for missing required argument', async () => {
+      await expect(
+        client.getPrompt({
+          name: 'security-review',
+          arguments: {},
+        })
+      ).rejects.toThrow();
     });
   });
 });
