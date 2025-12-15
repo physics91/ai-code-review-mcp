@@ -14,6 +14,7 @@ import { AnalysisAggregator } from './services/aggregator/merger.js';
 import { CodexAnalysisService } from './services/codex/client.js';
 import { GeminiAnalysisService } from './services/gemini/client.js';
 import { ToolRegistry } from './tools/registry.js';
+import { PromptRegistry } from './prompts/registry.js';
 
 /**
  * Main entry point
@@ -77,6 +78,19 @@ async function main(): Promise<void> {
     });
 
     registry.registerTools();
+
+    // Register MCP Prompts
+    const promptRegistry = new PromptRegistry(server, {
+      enabled: true,
+      builtInPrompts: [
+        'security-review',
+        'performance-review',
+        'style-review',
+        'general-review',
+        'bug-detection',
+      ],
+    }, logger);
+    promptRegistry.registerPrompts();
 
     // Setup transport
     const transport = new StdioServerTransport();

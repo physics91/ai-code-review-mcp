@@ -73,10 +73,20 @@ export const ServerConfigSchema = z.object({
   }),
 
   cache: z.object({
-    enabled: z.boolean().default(false),
+    enabled: z.boolean().default(true),
     ttl: z.number().min(0).default(3600000),
-    maxSize: z.number().min(0).default(100),
+    maxSize: z.number().min(0).default(1000),
+    strategy: z.enum(['lru', 'fifo']).default('lru'),
   }),
+
+  storage: z.object({
+    type: z.enum(['memory', 'sqlite']).default('sqlite'),
+    sqlite: z.object({
+      path: z.string().default('./data/ai-code-agent.db'),
+      enableWAL: z.boolean().default(true),
+      busyTimeout: z.number().min(0).default(5000),
+    }).default({}),
+  }).default({}),
 
   secretScanning: z.object({
     enabled: z.boolean().default(true),

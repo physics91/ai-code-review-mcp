@@ -153,6 +153,15 @@ Available tools when server is running:
 - `scan_secrets` - Scan for hardcoded secrets
 - `get_analysis_status` - Check async analysis status
 
+## MCP Prompts (v1.3.0+)
+
+Available prompts for code review:
+- `security-review` - Security-focused code review with threat model context
+- `performance-review` - Performance-focused code review
+- `style-review` - Code style and best practices review
+- `general-review` - General code review with configurable focus areas
+- `bug-detection` - Bug detection focused review
+
 ## Context-Aware Analysis
 
 Use presets for appropriate severity assessment:
