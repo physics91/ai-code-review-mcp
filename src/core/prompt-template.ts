@@ -28,10 +28,11 @@ DO NOT:
  */
 export const DEFAULT_FORMAT_INSTRUCTIONS = `IMPORTANT: You MUST respond with ONLY valid JSON in this exact structure (no additional text, no explanations):
 {
-  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string"}],
+  "findings": [{"type": "bug|security|performance|style", "severity": "critical|high|medium|low", "line": number, "title": "string", "description": "string", "suggestion": "string", "code": "string"}],
   "overallAssessment": "string",
   "recommendations": ["string"]
-}`;
+}
+If a field is not applicable, use an empty string (e.g., suggestion/code).`;
 
 /**
  * Template variables for rendering

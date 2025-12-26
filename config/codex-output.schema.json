@@ -3,14 +3,14 @@
   "title": "CodexAnalysisResponse",
   "type": "object",
   "additionalProperties": false,
-  "required": ["findings", "overallAssessment"],
+  "required": ["findings", "overallAssessment", "recommendations"],
   "properties": {
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "severity", "line", "title", "description"],
+        "required": ["type", "severity", "line", "title", "description", "suggestion", "code"],
         "properties": {
           "type": {
             "type": "string",
