@@ -265,18 +265,21 @@ export class ToolRegistry {
   ): CacheKeyParams {
     const { config } = this.dependencies;
 
+    const prompts = config.prompts ?? {};
+    const serviceTemplates = prompts.serviceTemplates ?? {};
+
     const options = params.options ?? {};
     const templateOverride = typeof options.template === 'string' ? options.template : undefined;
 
     const defaultTemplate =
       source === 'codex'
-        ? config.prompts.serviceTemplates?.codex
+        ? serviceTemplates.codex
         : source === 'gemini'
-        ? config.prompts.serviceTemplates?.gemini
+        ? serviceTemplates.gemini
         : undefined;
 
     const resolvedTemplate =
-      templateOverride ?? defaultTemplate ?? config.prompts.defaultTemplate ?? 'default';
+      templateOverride ?? defaultTemplate ?? prompts.defaultTemplate ?? 'default';
 
     const service =
       source === 'codex'

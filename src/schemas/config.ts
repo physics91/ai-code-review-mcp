@@ -28,7 +28,14 @@ export const ServerConfigSchema = z.object({
         intervalCap: z.number().min(1).optional(),
       })
       .default({}),
-    model: z.string().nullable().default('gpt-5'),
+    output: z
+      .object({
+        mode: z.enum(['jsonl', 'last-message']).default('last-message'),
+        lastMessageFileDir: z.string().optional(),
+        outputSchemaPath: z.string().optional(),
+      })
+      .default({ mode: 'last-message' }),
+    model: z.string().nullable().default('gpt-5.2'),
     search: z.boolean().default(true),
     reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).default('high'),
     args: z.array(z.string()).default([]),

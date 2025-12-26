@@ -14,6 +14,10 @@
     "retryDelay": 1000,
     "maxConcurrent": 1,
     "queue": {},
+    "output": {
+      "mode": "last-message",
+      "outputSchemaPath": "./config/codex-output.schema.json"
+    },
     "model": "gpt-5.2",
     "search": true,
     "reasoningEffort": "xhigh",

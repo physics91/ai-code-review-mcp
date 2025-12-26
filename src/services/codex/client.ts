@@ -5,7 +5,9 @@
  * Migrated from MCP tool to direct CLI execution for consistency with Gemini service
  */
 
-import { resolve } from 'path';
+import { mkdir, readFile, unlink } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join, resolve } from 'path';
 
 import { execa } from 'execa';
 import { z } from 'zod';
@@ -49,6 +51,11 @@ export interface CodexServiceConfig {
   search?: boolean;
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   args?: string[];
+  output?: {
+    mode?: 'jsonl' | 'last-message';
+    lastMessageFileDir?: string;
+    outputSchemaPath?: string;
+  };
   // Context system configuration
   context?: ContextConfig;
   prompts?: TemplateEngineConfig;
@@ -273,7 +280,7 @@ export class CodexAnalysisService {
 
       // Execute CLI with retry logic
       const output = await this.retryManager.execute(
-        () => this.executeCodexCLI(prompt, timeout, cliPath),
+        () => this.executeCodexCLI(prompt, timeout, cliPath, analysisId),
         'Codex review'
       );
 
@@ -349,16 +356,35 @@ export class CodexAnalysisService {
    * Execute Codex CLI command securely
    * @param cliPath - Pre-validated CLI path (validation done before retry logic)
    */
-  private async executeCodexCLI(prompt: string, timeout: number, cliPath: string): Promise<string> {
-    // Build CLI arguments
-    const args = this.buildCLIArgs();
+  private async executeCodexCLI(
+    prompt: string,
+    timeout: number,
+    cliPath: string,
+    analysisId: string
+  ): Promise<string> {
+    const outputConfig = this.config.output;
+    let outputMode = outputConfig?.mode ?? 'jsonl';
+    let lastMessagePath: string | undefined;
 
-    this.logger.debug({ cliPath, argsCount: args.length, timeout }, 'Executing Codex CLI');
+    if (outputMode === 'last-message') {
+      try {
+        const baseDir = outputConfig?.lastMessageFileDir ?? tmpdir();
+        await mkdir(baseDir, { recursive: true });
+        lastMessagePath = join(baseDir, `codex-last-message-${analysisId}.json`);
+      } catch (error) {
+        this.logger.warn(
+          { analysisId, error },
+          'Failed to prepare last-message output file, falling back to JSONL output'
+        );
+        outputMode = 'jsonl';
+      }
+    }
 
-    try {
-      // Execute CLI using execa (secure, no shell injection)
-      // Pass prompt via stdin using '-' argument to indicate stdin input
-      const result = await execa(cliPath, ['e', ...args, '-'], {
+    const cleanupPath = lastMessagePath;
+
+    const runCodex = async (args: string[]) => {
+      this.logger.debug({ cliPath, argsCount: args.length, timeout }, 'Executing Codex CLI');
+      return execa(cliPath, ['e', ...args, '-'], {
         timeout: timeout === 0 ? undefined : timeout, // 0 = unlimited (no timeout)
         reject: true, // Throw on ANY non-zero exit code
         input: prompt, // Send prompt via stdin
@@ -370,6 +396,22 @@ export class CodexAnalysisService {
         // Security: Don't use shell
         shell: false,
       });
+    };
+
+    const readOutput = async (result: { stdout?: string; stderr?: string }, path?: string) => {
+      if (path) {
+        try {
+          const fileContents = await readFile(path, 'utf8');
+          if (fileContents.trim() !== '') {
+            return fileContents;
+          }
+        } catch (error) {
+          this.logger.debug(
+            { analysisId, error },
+            'Failed to read last-message output file, falling back to stdout'
+          );
+        }
+      }
 
       const stdout = result.stdout ?? '';
       if (stdout.trim() !== '') {
@@ -378,6 +420,19 @@ export class CodexAnalysisService {
 
       const stderr = result.stderr ?? '';
       return stderr !== '' ? stderr : '';
+    };
+
+    const buildArgs = (mode: 'jsonl' | 'last-message', path?: string) =>
+      this.buildCLIArgs({
+        outputMode: mode,
+        lastMessagePath: path,
+        outputSchemaPath: outputConfig?.outputSchemaPath,
+      });
+
+    try {
+      const args = buildArgs(outputMode, lastMessagePath);
+      const result = await runCodex(args);
+      return await readOutput(result, lastMessagePath);
     } catch (error: unknown) {
       const err = error as {
         timedOut?: boolean;
@@ -387,20 +442,61 @@ export class CodexAnalysisService {
         failed?: boolean;
       };
 
-      if (err.timedOut) {
+      const combinedOutput = `${err.stderr ?? ''}\n${err.stdout ?? ''}`.toLowerCase();
+      const outputFlagMentioned =
+        combinedOutput.includes('--output-last-message') ||
+        combinedOutput.includes('output-last-message');
+      const unknownFlag =
+        combinedOutput.includes('unknown') ||
+        combinedOutput.includes('unrecognized') ||
+        combinedOutput.includes('invalid') ||
+        combinedOutput.includes('unexpected');
+
+      if (outputMode === 'last-message' && outputFlagMentioned && unknownFlag) {
+        this.logger.warn(
+          { analysisId },
+          'Codex CLI does not support output-last-message; retrying with JSONL output'
+        );
+        try {
+          const fallbackArgs = buildArgs('jsonl');
+          const fallbackResult = await runCodex(fallbackArgs);
+          return await readOutput(fallbackResult);
+        } catch (fallbackError: unknown) {
+          error = fallbackError;
+        }
+      }
+
+      const finalError = error as {
+        timedOut?: boolean;
+        exitCode?: number;
+        stderr?: string;
+        stdout?: string;
+        failed?: boolean;
+      };
+
+      if (finalError.timedOut) {
         throw new TimeoutError(`Codex CLI timed out after ${timeout}ms`);
       }
 
       // ANY non-zero exit code is now an error
-      if (err.exitCode !== undefined && err.exitCode !== 0) {
-        throw new CLIExecutionError(`Codex CLI exited with code ${err.exitCode}`, {
-          exitCode: err.exitCode,
-          stderr: err.stderr,
-          stdout: err.stdout,
+      if (finalError.exitCode !== undefined && finalError.exitCode !== 0) {
+        throw new CLIExecutionError(`Codex CLI exited with code ${finalError.exitCode}`, {
+          exitCode: finalError.exitCode,
+          stderr: finalError.stderr,
+          stdout: finalError.stdout,
         });
       }
 
-      throw new CLIExecutionError('Codex CLI execution failed', { cause: error });
+      throw new CLIExecutionError('Codex CLI execution failed', { cause: finalError });
+    } finally {
+      if (cleanupPath) {
+        await unlink(cleanupPath).catch(error => {
+          this.logger.debug(
+            { analysisId, error },
+            'Failed to remove last-message output file'
+          );
+        });
+      }
     }
   }
 
@@ -507,7 +603,11 @@ export class CodexAnalysisService {
   /**
    * Build CLI arguments
    */
-  private buildCLIArgs(): string[] {
+  private buildCLIArgs(options?: {
+    outputMode?: 'jsonl' | 'last-message';
+    lastMessagePath?: string;
+    outputSchemaPath?: string;
+  }): string[] {
     const args: string[] = [];
 
     // Add model if specified
@@ -524,8 +624,17 @@ export class CodexAnalysisService {
     const reasoningEffort = this.config.reasoningEffort ?? 'high';
     args.push('-c', `model_reasoning_effort=${reasoningEffort}`);
 
-    // Add JSON output flag
-    args.push('--json');
+    const outputMode = options?.outputMode ?? this.config.output?.mode ?? 'jsonl';
+
+    if (outputMode === 'jsonl') {
+      // Add JSONL output flag
+      args.push('--json');
+    } else if (outputMode === 'last-message' && options?.lastMessagePath) {
+      args.push('--output-last-message', options.lastMessagePath);
+      if (options.outputSchemaPath) {
+        args.push('--output-schema', options.outputSchemaPath);
+      }
+    }
 
     // Skip git repo check for code review
     args.push('--skip-git-repo-check');
@@ -538,7 +647,14 @@ export class CodexAnalysisService {
     if (this.config.args && this.config.args.length > 0) {
       // Filter out dangerous flags that could override safety settings
       // Using exact match or flag=value pattern to avoid filtering all --flags
-      const dangerousFlags = ['--sandbox', '--json', '--no-sandbox', '--skip-git-repo-check'];
+      const dangerousFlags = [
+        '--sandbox',
+        '--json',
+        '--no-sandbox',
+        '--skip-git-repo-check',
+        '--output-last-message',
+        '--output-schema',
+      ];
       const safeArgs = this.config.args.filter(arg => {
         const lowerArg = arg.toLowerCase();
         // Check for exact match or flag=value pattern
@@ -589,51 +705,75 @@ export class CodexAnalysisService {
     const cleaned = this.cleanOutput(output);
 
     try {
-      // Step 2: Extract the analysis result from Codex JSONL format
+      if (!cleaned) {
+        return this.createRawOutputResult(analysisId, '', 'codex', 'Empty output');
+      }
+
       let analysisJson: unknown = null;
 
-      const lines = cleaned.split('\n').filter(line => line.trim());
-      for (const line of lines) {
+      // Step 2: Try direct JSON parse first (fast path for last-message mode)
+      const trimmed = cleaned.trimStart();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
         try {
-          const event: unknown = JSON.parse(line);
-
-          // Look for the final agent message with analysis result
-          if (isRecord(event) && event.type === 'item.completed') {
-            const item = event.item;
-            if (isRecord(item) && item.type === 'agent_message' && typeof item.text === 'string') {
-              // The text field contains the JSON response as a string
-              analysisJson = JSON.parse(item.text) as unknown;
-              break;
-            }
+          const parsed = JSON.parse(cleaned) as unknown;
+          const directValidation = CodexResponseSchema.safeParse(parsed);
+          if (directValidation.success) {
+            analysisJson = directValidation.data;
           }
-        } catch (lineError: unknown) {
-          // Non-JSON line, log at debug level and skip
-          this.logger.debug(
-            { analysisId, line: line.substring(0, 100), error: lineError },
-            'Skipping non-JSON line in Codex output'
-          );
-          continue;
-        }
-      }
-
-      // Step 3: If no structured event found, try direct JSON parse
-      if (!analysisJson) {
-        try {
-          analysisJson = JSON.parse(cleaned);
         } catch {
-          // Parsing failed - return raw output
-          this.logger.warn(
-            { analysisId, outputLength: cleaned.length },
-            'Could not parse Codex output as JSON, returning raw'
-          );
-          return this.createRawOutputResult(analysisId, cleaned, 'codex');
+          analysisJson = null;
         }
       }
 
-      // Step 4: Validate against schema
-      const validated = CodexResponseSchema.parse(analysisJson);
+      // Step 3: Fall back to JSONL scan for codex exec output
+      if (!analysisJson) {
+        const lines = cleaned.split('\n');
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+          const line = lines[i]?.trim();
+          if (!line) {
+            continue;
+          }
+          if (!line.includes('item.completed')) {
+            continue;
+          }
+          try {
+            const event: unknown = JSON.parse(line);
 
-      // Step 5: Build result
+            // Look for the final agent message with analysis result
+            if (isRecord(event) && event.type === 'item.completed') {
+              const item = event.item;
+              if (isRecord(item) && item.type === 'agent_message' && typeof item.text === 'string') {
+                // The text field contains the JSON response as a string
+                analysisJson = JSON.parse(item.text) as unknown;
+                break;
+              }
+            }
+          } catch (lineError: unknown) {
+            // Non-JSON line, log at debug level and skip
+            this.logger.debug(
+              { analysisId, line: line.substring(0, 100), error: lineError },
+              'Skipping non-JSON line in Codex output'
+            );
+          }
+        }
+      }
+
+      // Step 4: If parsing failed, return raw output
+      if (!analysisJson) {
+        this.logger.warn(
+          { analysisId, outputLength: cleaned.length },
+          'Could not parse Codex output as JSON, returning raw'
+        );
+        return this.createRawOutputResult(analysisId, cleaned, 'codex');
+      }
+
+      // Step 5: Validate against schema (JSONL path)
+      const validated =
+        analysisJson && typeof analysisJson === 'object'
+          ? CodexResponseSchema.parse(analysisJson)
+          : CodexResponseSchema.parse(analysisJson);
+
+      // Step 6: Build result
       const summary = this.calculateSummary(validated.findings);
 
       const result: AnalysisResult = {

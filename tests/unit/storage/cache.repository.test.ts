@@ -25,6 +25,7 @@ describe('CacheRepository', () => {
     repository = new CacheRepository(dbManager.getDb(), {
       maxSize: 10,
       defaultTtlMs: 3600000,
+      touchIntervalMs: 0,
     });
   });
 
