@@ -115,6 +115,27 @@ export class AnalysisAggregator {
     const threshold = this.config.deduplication?.similarityThreshold ?? 0.8;
     const deduplicated: AggregatedFinding[] = [];
     const processed = new Set<number>();
+    const lineBuckets = new Map<number, number[]>();
+    const titleBuckets = new Map<string, number[]>();
+
+    // Pre-bucket findings to reduce comparisons
+    for (let i = 0; i < findings.length; i++) {
+      const finding = findings[i];
+      if (!finding) continue;
+
+      if (finding.line !== null) {
+        const bucket = lineBuckets.get(finding.line) ?? [];
+        bucket.push(i);
+        lineBuckets.set(finding.line, bucket);
+      }
+
+      const titleKey = this.buildTitleKey(finding.title);
+      if (titleKey) {
+        const bucket = titleBuckets.get(titleKey) ?? [];
+        bucket.push(i);
+        titleBuckets.set(titleKey, bucket);
+      }
+    }
 
     for (let i = 0; i < findings.length; i++) {
       if (processed.has(i)) continue;
@@ -125,9 +146,28 @@ export class AnalysisAggregator {
       const sources: Array<'codex' | 'gemini'> = [current.source];
       const similarIndices: number[] = [];
 
+      const candidates = new Set<number>();
+      if (current.line !== null) {
+        for (const idx of lineBuckets.get(current.line) ?? []) {
+          candidates.add(idx);
+        }
+      }
+      const currentTitleKey = this.buildTitleKey(current.title);
+      if (currentTitleKey) {
+        for (const idx of titleBuckets.get(currentTitleKey) ?? []) {
+          candidates.add(idx);
+        }
+      }
+
+      // Fallback: if no candidates, compare against all remaining items
+      const candidateList =
+        candidates.size > 0
+          ? Array.from(candidates)
+          : Array.from({ length: findings.length - i - 1 }, (_, idx) => i + 1 + idx);
+
       // Find similar findings
-      for (let j = i + 1; j < findings.length; j++) {
-        if (processed.has(j)) continue;
+      for (const j of candidateList) {
+        if (j <= i || processed.has(j)) continue;
 
         const otherFinding = findings[j];
         if (!otherFinding) continue; // Skip if undefined
@@ -170,6 +210,20 @@ export class AnalysisAggregator {
     }
 
     return deduplicated;
+  }
+
+  /**
+   * Build a lightweight title key to bucket similar findings
+   */
+  private buildTitleKey(title: string): string | null {
+    const tokens = title
+      .toLowerCase()
+      .split(/\W+/)
+      .filter(token => token.length >= 3);
+
+    if (tokens.length === 0) return null;
+
+    return tokens.slice(0, 4).join('|');
   }
 
   /**
@@ -278,15 +332,23 @@ export class AnalysisAggregator {
     low: number;
     consensus: number;
   } {
-    const totalFindings = findings.length;
-    const critical = findings.filter(f => f.severity === 'critical').length;
-    const high = findings.filter(f => f.severity === 'high').length;
-    const medium = findings.filter(f => f.severity === 'medium').length;
-    const low = findings.filter(f => f.severity === 'low').length;
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+    let highConfidence = 0;
 
-    // Calculate consensus (percentage of findings with high confidence)
-    const highConfidence = findings.filter(f => f.confidence === 'high').length;
-    const consensus = totalFindings > 0 ? Math.round((highConfidence / totalFindings) * 100) : 100;
+    for (const finding of findings) {
+      if (finding.severity === 'critical') critical++;
+      else if (finding.severity === 'high') high++;
+      else if (finding.severity === 'medium') medium++;
+      else if (finding.severity === 'low') low++;
+      if (finding.confidence === 'high') highConfidence++;
+    }
+
+    const totalFindings = findings.length;
+    const consensus =
+      totalFindings > 0 ? Math.round((highConfidence / totalFindings) * 100) : 100;
 
     return {
       totalFindings,

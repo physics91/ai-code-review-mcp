@@ -63,6 +63,7 @@ export class CodexAnalysisService {
   private retryManager: RetryManager;
   private allowedCLIPaths: string[];
   private detectedCLIPath: string | null = null;
+  private validatedCLIPaths: Set<string> = new Set();
 
   // Maximum output size to parse (guard against unexpectedly large responses)
   private static readonly MAX_PARSE_SIZE = 1024 * 1024; // 1MB
@@ -208,7 +209,10 @@ export class CodexAnalysisService {
       const validated = CodeAnalysisParamsSchema.parse(params);
 
       // Use per-request timeout if specified
-      const timeout = validated.options?.timeout ?? this.config.timeout;
+      const timeout =
+        this.config.timeout === 0
+          ? 0
+          : (validated.options?.timeout ?? this.config.timeout);
 
       // Ensure CLI path is initialized (in case auto-detection is still in progress)
       if (this.config.cliPath === 'auto' && !this.detectedCLIPath) {
@@ -357,7 +361,6 @@ export class CodexAnalysisService {
       const result = await execa(cliPath, ['e', ...args, '-'], {
         timeout: timeout === 0 ? undefined : timeout, // 0 = unlimited (no timeout)
         reject: true, // Throw on ANY non-zero exit code
-        all: true,
         input: prompt, // Send prompt via stdin
         env: {
           ...process.env,
@@ -369,12 +372,12 @@ export class CodexAnalysisService {
       });
 
       const stdout = result.stdout ?? '';
-      if (stdout !== '') {
+      if (stdout.trim() !== '') {
         return stdout;
       }
 
-      const allOutput = result.all ?? '';
-      return allOutput !== '' ? allOutput : '';
+      const stderr = result.stderr ?? '';
+      return stderr !== '' ? stderr : '';
     } catch (error: unknown) {
       const err = error as {
         timedOut?: boolean;
@@ -407,6 +410,10 @@ export class CodexAnalysisService {
    */
   private async validateCLIPath(cliPath: string): Promise<void> {
     try {
+      if (this.validatedCLIPaths.has(cliPath)) {
+        return;
+      }
+
       // Special handling for system PATH executables
       if (cliPath === 'codex' || cliPath === 'codex.cmd') {
         // Check if in whitelist first
@@ -459,6 +466,7 @@ export class CodexAnalysisService {
         }
 
         // Passed all checks
+        this.validatedCLIPaths.add(cliPath);
         return;
       }
 
@@ -486,6 +494,8 @@ export class CodexAnalysisService {
         });
         throw new SecurityError(`CLI path not in allowed list: ${cliPath}`);
       }
+
+      this.validatedCLIPaths.add(cliPath);
     } catch (error) {
       if (error instanceof SecurityError) {
         throw error;
@@ -717,12 +727,24 @@ export class CodexAnalysisService {
     medium: number;
     low: number;
   } {
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+
+    for (const finding of findings) {
+      if (finding.severity === 'critical') critical++;
+      else if (finding.severity === 'high') high++;
+      else if (finding.severity === 'medium') medium++;
+      else if (finding.severity === 'low') low++;
+    }
+
     return {
       totalFindings: findings.length,
-      critical: findings.filter(f => f.severity === 'critical').length,
-      high: findings.filter(f => f.severity === 'high').length,
-      medium: findings.filter(f => f.severity === 'medium').length,
-      low: findings.filter(f => f.severity === 'low').length,
+      critical,
+      high,
+      medium,
+      low,
     };
   }
 

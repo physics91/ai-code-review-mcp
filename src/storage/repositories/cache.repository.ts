@@ -16,11 +16,13 @@ export type CacheSource = 'codex' | 'gemini' | 'combined';
 export interface CacheConfig {
   maxSize: number;
   defaultTtlMs: number;
+  touchIntervalMs: number;
 }
 
 const DEFAULT_CONFIG: CacheConfig = {
   maxSize: 1000,
   defaultTtlMs: 3600000, // 1 hour
+  touchIntervalMs: 30000, // 30 seconds
 };
 
 export class CacheRepository extends BaseRepository {
@@ -54,17 +56,23 @@ export class CacheRepository extends BaseRepository {
       return null;
     }
 
-    // Update hit count and last accessed time
-    this.db
-      .update(cache)
-      .set({
-        hitCount: sql`${cache.hitCount} + 1`,
-        lastAccessedAt: this.getCurrentTimestamp(),
-      })
-      .where(eq(cache.cacheKey, cacheKey))
-      .run();
+    const now = Date.now();
+    const lastAccessedMs = entry.lastAccessedAt ? new Date(entry.lastAccessedAt).getTime() : 0;
+    const shouldTouch = now - lastAccessedMs >= this.config.touchIntervalMs;
 
-    this.logger?.debug({ cacheKey, hitCount: (entry.hitCount ?? 0) + 1 }, 'Cache hit');
+    if (shouldTouch) {
+      // Update hit count and last accessed time (throttled)
+      this.db
+        .update(cache)
+        .set({
+          hitCount: sql`${cache.hitCount} + 1`,
+          lastAccessedAt: this.getCurrentTimestamp(),
+        })
+        .where(eq(cache.cacheKey, cacheKey))
+        .run();
+
+      this.logger?.debug({ cacheKey, hitCount: (entry.hitCount ?? 0) + 1 }, 'Cache hit');
+    }
     return entry;
   }
 

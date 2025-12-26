@@ -18,13 +18,15 @@ import type { Logger } from '../core/logger.js';
 import { ValidationUtils } from '../core/validation.js';
 import type { ServerConfig } from '../schemas/config.js';
 import {
-  CombinedAnalysisInputSchema,
+  createCombinedAnalysisInputSchema,
   createCodeAnalysisParamsSchema,
   type AggregatedAnalysis,
   type AnalysisResult,
 } from '../schemas/tools.js';
 import type { AnalysisAggregator } from '../services/aggregator/merger.js';
 import { AnalysisStatusStore } from '../services/analysis-status/store.js';
+import type { CacheService } from '../services/cache/cache.service.js';
+import { generateShortCacheKey, type CacheKeyParams } from '../services/cache/cache-key.js';
 import type { CodexAnalysisService } from '../services/codex/client.js';
 import type { GeminiAnalysisService } from '../services/gemini/client.js';
 import { SecretScanner } from '../services/scanner/secrets.js';
@@ -63,13 +65,29 @@ export interface ToolDependencies {
   logger: Logger;
   config: ServerConfig;
   secretScanner?: SecretScanner;
+  cacheService?: CacheService;
 }
 
 /**
  * Format analysis result as markdown
  */
-function formatAnalysisAsMarkdown(result: AnalysisResult | AggregatedAnalysis): string {
+function formatAnalysisAsMarkdown(
+  result: AnalysisResult | AggregatedAnalysis,
+  options?: {
+    maxFindings?: number;
+    maxCodeSnippetLength?: number;
+    maxOutputChars?: number;
+  }
+): string {
   const lines: string[] = [];
+  const maxFindings =
+    typeof options?.maxFindings === 'number' && options.maxFindings > 0
+      ? options.maxFindings
+      : Number.POSITIVE_INFINITY;
+  const maxCodeSnippetLength =
+    typeof options?.maxCodeSnippetLength === 'number' && options.maxCodeSnippetLength > 0
+      ? options.maxCodeSnippetLength
+      : Number.POSITIVE_INFINITY;
 
   // Overall Assessment
   lines.push('## Overall Assessment\n');
@@ -90,7 +108,8 @@ function formatAnalysisAsMarkdown(result: AnalysisResult | AggregatedAnalysis): 
   // Findings
   if (result.findings.length > 0) {
     lines.push('## Findings\n');
-    result.findings.forEach((finding, index) => {
+    const findingsToRender = result.findings.slice(0, maxFindings);
+    findingsToRender.forEach((finding, index) => {
       const severityEmoji =
         {
           critical: '🔴',
@@ -113,13 +132,24 @@ function formatAnalysisAsMarkdown(result: AnalysisResult | AggregatedAnalysis): 
         lines.push('');
       }
       if (finding.code) {
+        const code =
+          finding.code.length > maxCodeSnippetLength
+            ? `${finding.code.slice(0, maxCodeSnippetLength)}\n... (truncated)`
+            : finding.code;
         lines.push('**Code:**');
         lines.push('```');
-        lines.push(finding.code);
+        lines.push(code);
         lines.push('```');
         lines.push('');
       }
     });
+
+    if (result.findings.length > findingsToRender.length) {
+      lines.push(
+        `*Showing ${findingsToRender.length} of ${result.findings.length} findings. Increase maxFindings to view more.*`
+      );
+      lines.push('');
+    }
   }
 
   // Recommendations
@@ -141,7 +171,16 @@ function formatAnalysisAsMarkdown(result: AnalysisResult | AggregatedAnalysis): 
     '**Do you agree with this analysis?** If you have any objections or additional context, please share your feedback.'
   );
 
-  return lines.join('\n');
+  const output = lines.join('\n');
+  if (
+    typeof options?.maxOutputChars === 'number' &&
+    options.maxOutputChars > 0 &&
+    output.length > options.maxOutputChars
+  ) {
+    return `${output.slice(0, options.maxOutputChars)}\n\n...[truncated]`;
+  }
+
+  return output;
 }
 
 /**
@@ -153,21 +192,39 @@ export class ToolRegistry {
   private codexQueue: PQueue;
   private geminiQueue: PQueue;
   private secretScanner: SecretScanner;
+  private cacheService: CacheService | null;
 
   constructor(
     private server: McpServer,
     private dependencies: ToolDependencies
   ) {
     this.analysisStatusStore = AnalysisStatusStore.getInstance();
+    this.cacheService = dependencies.cacheService ?? null;
+
+    const buildQueueOptions = (
+      queueConfig: { interval?: number; intervalCap?: number } | undefined,
+      maxConcurrent: number
+    ) => {
+      const options: { concurrency: number; interval?: number; intervalCap?: number } = {
+        concurrency: maxConcurrent,
+      };
+
+      if (queueConfig?.interval !== undefined && queueConfig.interval > 0) {
+        options.interval = queueConfig.interval;
+        options.intervalCap = queueConfig.intervalCap ?? maxConcurrent;
+      }
+
+      return options;
+    };
 
     // MAJOR FIX #7: Initialize queues for concurrency control
-    this.codexQueue = new PQueue({
-      concurrency: dependencies.config.codex.maxConcurrent,
-    });
+    this.codexQueue = new PQueue(
+      buildQueueOptions(dependencies.config.codex.queue, dependencies.config.codex.maxConcurrent)
+    );
 
-    this.geminiQueue = new PQueue({
-      concurrency: dependencies.config.gemini.maxConcurrent,
-    });
+    this.geminiQueue = new PQueue(
+      buildQueueOptions(dependencies.config.gemini.queue, dependencies.config.gemini.maxConcurrent)
+    );
 
     // Initialize secret scanner
     this.secretScanner =
@@ -175,6 +232,8 @@ export class ToolRegistry {
       new SecretScanner(
         {
           enabled: dependencies.config.secretScanning.enabled,
+          maxScanLength: dependencies.config.secretScanning.maxScanLength,
+          maxLineLength: dependencies.config.secretScanning.maxLineLength,
           patterns: dependencies.config.secretScanning.patterns,
           excludePatterns: dependencies.config.secretScanning.excludePatterns,
         },
@@ -198,6 +257,69 @@ export class ToolRegistry {
     }
 
     return value;
+  }
+
+  private buildCacheKeyParams(
+    source: 'codex' | 'gemini' | 'combined',
+    params: { prompt: string; context?: Record<string, unknown>; options?: Record<string, unknown> }
+  ): CacheKeyParams {
+    const { config } = this.dependencies;
+
+    const options = params.options ?? {};
+    const templateOverride = typeof options.template === 'string' ? options.template : undefined;
+
+    const defaultTemplate =
+      source === 'codex'
+        ? config.prompts.serviceTemplates?.codex
+        : source === 'gemini'
+        ? config.prompts.serviceTemplates?.gemini
+        : undefined;
+
+    const resolvedTemplate =
+      templateOverride ?? defaultTemplate ?? config.prompts.defaultTemplate ?? 'default';
+
+    const service =
+      source === 'codex'
+        ? {
+            model: config.codex.model ?? null,
+            reasoningEffort: config.codex.reasoningEffort,
+            search: config.codex.search,
+            args: config.codex.args,
+            template: resolvedTemplate,
+            version: config.server.version,
+          }
+        : source === 'gemini'
+        ? {
+            model: config.gemini.model ?? null,
+            args: config.gemini.args,
+            template: resolvedTemplate,
+            version: config.server.version,
+          }
+        : {
+            model: `${config.codex.model ?? ''}|${config.gemini.model ?? ''}`,
+            reasoningEffort: config.codex.reasoningEffort,
+            search: config.codex.search,
+            args: [...(config.codex.args ?? []), '|', ...(config.gemini.args ?? [])],
+            template: resolvedTemplate,
+            version: config.server.version,
+          };
+
+    return {
+      prompt: params.prompt,
+      source,
+      context: params.context as CacheKeyParams['context'] | undefined,
+      options: {
+        severity: typeof options.severity === 'string' ? options.severity : undefined,
+        preset: typeof options.preset === 'string' ? options.preset : undefined,
+        template: typeof options.template === 'string' ? options.template : undefined,
+        autoDetect: typeof options.autoDetect === 'boolean' ? options.autoDetect : undefined,
+        warnOnMissingContext:
+          typeof options.warnOnMissingContext === 'boolean'
+            ? options.warnOnMissingContext
+            : undefined,
+      },
+      service,
+    };
   }
 
   /**
@@ -243,12 +365,13 @@ export class ToolRegistry {
 
     // Register combined analysis tool if both services are enabled
     if (codexService && geminiService) {
+      const combinedSchema = createCombinedAnalysisInputSchema(maxCodeLength);
       this.server.registerTool(
         'analyze_code_combined',
         {
           title: 'Analyze Code Combined',
           description: 'Perform code analysis using both Codex and Gemini, then aggregate results',
-          inputSchema: CombinedAnalysisInputSchema.shape,
+          inputSchema: combinedSchema.shape,
         },
         async args => {
           logger.info({ tool: 'analyze_code_combined' }, 'Tool called');
@@ -330,34 +453,55 @@ export class ToolRegistry {
       this.analysisStatusStore.updateStatus(analysisId, 'in_progress');
 
       try {
-        const result = await codexService.analyzeCode(finalParams);
+        const cacheKeyParams = this.buildCacheKeyParams('codex', finalParams);
+        const cacheKeyShort = this.cacheService ? generateShortCacheKey(cacheKeyParams) : null;
+
+        const executeAnalysis = async () => {
+          const result = await codexService.analyzeCode(finalParams);
+
+          // Integrate secret scanning results
+          if (config.secretScanning?.enabled) {
+            const secretFindings = this.secretScanner.scan(finalParams.prompt);
+            const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+            if (secretAnalysisFindings.length > 0) {
+              // Add secret findings to result
+              result.findings = [...secretAnalysisFindings, ...result.findings];
+
+              // Update summary counts
+              for (const finding of secretAnalysisFindings) {
+                result.summary.totalFindings++;
+                if (finding.severity === 'critical') result.summary.critical++;
+                else if (finding.severity === 'high') result.summary.high++;
+                else if (finding.severity === 'medium') result.summary.medium++;
+                else if (finding.severity === 'low') result.summary.low++;
+              }
+
+              logger.debug(
+                { secretCount: secretAnalysisFindings.length, analysisId },
+                'Secret findings added to analysis'
+              );
+            }
+          }
+
+          return result;
+        };
+
+        const { result, fromCache } =
+          this.cacheService && this.cacheService.isEnabled()
+            ? await this.cacheService.getOrSet(cacheKeyParams, executeAnalysis)
+            : { result: await executeAnalysis(), fromCache: false };
 
         // Override the generated analysisId with our tracked one
         result.analysisId = analysisId;
+        result.timestamp = new Date().toISOString();
+        result.metadata.fromCache = fromCache;
+        if (cacheKeyShort) {
+          result.metadata.cacheKey = cacheKeyShort;
+        }
 
-        // Integrate secret scanning results
-        if (config.secretScanning?.enabled) {
-          const secretFindings = this.secretScanner.scan(finalParams.prompt);
-          const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
-
-          if (secretAnalysisFindings.length > 0) {
-            // Add secret findings to result
-            result.findings = [...secretAnalysisFindings, ...result.findings];
-
-            // Update summary counts
-            for (const finding of secretAnalysisFindings) {
-              result.summary.totalFindings++;
-              if (finding.severity === 'critical') result.summary.critical++;
-              else if (finding.severity === 'high') result.summary.high++;
-              else if (finding.severity === 'medium') result.summary.medium++;
-              else if (finding.severity === 'low') result.summary.low++;
-            }
-
-            logger.debug(
-              { secretCount: secretAnalysisFindings.length, analysisId },
-              'Secret findings added to analysis'
-            );
-          }
+        if (fromCache) {
+          logger.info({ analysisId, cacheKey: cacheKeyShort }, 'Codex analysis served from cache');
         }
 
         // CRITICAL FIX #3: Store result on success
@@ -369,7 +513,11 @@ export class ToolRegistry {
           content: [
             {
               type: 'text' as const,
-              text: formatAnalysisAsMarkdown(result),
+              text: formatAnalysisAsMarkdown(result, {
+                maxFindings: config.analysis.maxFindings,
+                maxCodeSnippetLength: config.analysis.maxCodeSnippetLength,
+                maxOutputChars: config.analysis.maxOutputChars,
+              }),
             },
           ],
         };
@@ -433,34 +581,55 @@ export class ToolRegistry {
       this.analysisStatusStore.updateStatus(analysisId, 'in_progress');
 
       try {
-        const result = await geminiService.analyzeCode(finalParams);
+        const cacheKeyParams = this.buildCacheKeyParams('gemini', finalParams);
+        const cacheKeyShort = this.cacheService ? generateShortCacheKey(cacheKeyParams) : null;
+
+        const executeAnalysis = async () => {
+          const result = await geminiService.analyzeCode(finalParams);
+
+          // Integrate secret scanning results
+          if (config.secretScanning?.enabled) {
+            const secretFindings = this.secretScanner.scan(finalParams.prompt);
+            const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+            if (secretAnalysisFindings.length > 0) {
+              // Add secret findings to result
+              result.findings = [...secretAnalysisFindings, ...result.findings];
+
+              // Update summary counts
+              for (const finding of secretAnalysisFindings) {
+                result.summary.totalFindings++;
+                if (finding.severity === 'critical') result.summary.critical++;
+                else if (finding.severity === 'high') result.summary.high++;
+                else if (finding.severity === 'medium') result.summary.medium++;
+                else if (finding.severity === 'low') result.summary.low++;
+              }
+
+              logger.debug(
+                { secretCount: secretAnalysisFindings.length, analysisId },
+                'Secret findings added to analysis'
+              );
+            }
+          }
+
+          return result;
+        };
+
+        const { result, fromCache } =
+          this.cacheService && this.cacheService.isEnabled()
+            ? await this.cacheService.getOrSet(cacheKeyParams, executeAnalysis)
+            : { result: await executeAnalysis(), fromCache: false };
 
         // Override the generated analysisId with our tracked one
         result.analysisId = analysisId;
+        result.timestamp = new Date().toISOString();
+        result.metadata.fromCache = fromCache;
+        if (cacheKeyShort) {
+          result.metadata.cacheKey = cacheKeyShort;
+        }
 
-        // Integrate secret scanning results
-        if (config.secretScanning?.enabled) {
-          const secretFindings = this.secretScanner.scan(finalParams.prompt);
-          const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
-
-          if (secretAnalysisFindings.length > 0) {
-            // Add secret findings to result
-            result.findings = [...secretAnalysisFindings, ...result.findings];
-
-            // Update summary counts
-            for (const finding of secretAnalysisFindings) {
-              result.summary.totalFindings++;
-              if (finding.severity === 'critical') result.summary.critical++;
-              else if (finding.severity === 'high') result.summary.high++;
-              else if (finding.severity === 'medium') result.summary.medium++;
-              else if (finding.severity === 'low') result.summary.low++;
-            }
-
-            logger.debug(
-              { secretCount: secretAnalysisFindings.length, analysisId },
-              'Secret findings added to analysis'
-            );
-          }
+        if (fromCache) {
+          logger.info({ analysisId, cacheKey: cacheKeyShort }, 'Gemini analysis served from cache');
         }
 
         // CRITICAL FIX #3: Store result on success
@@ -472,7 +641,11 @@ export class ToolRegistry {
           content: [
             {
               type: 'text' as const,
-              text: formatAnalysisAsMarkdown(result),
+              text: formatAnalysisAsMarkdown(result, {
+                maxFindings: config.analysis.maxFindings,
+                maxCodeSnippetLength: config.analysis.maxCodeSnippetLength,
+                maxOutputChars: config.analysis.maxOutputChars,
+              }),
             },
           ],
         };
@@ -505,15 +678,17 @@ export class ToolRegistry {
   private async handleCombinedAnalysis(
     args: unknown
   ): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
-    const { codexService, geminiService, aggregator, logger } = this.dependencies;
+    const { codexService, geminiService, aggregator, logger, config } = this.dependencies;
 
     if (!codexService || !geminiService) {
       throw new Error('Both Codex and Gemini services must be enabled for combined analysis');
     }
 
     // ENHANCEMENT: Validate input with detailed error messages
+    const maxCodeLength = config.analysis.maxCodeLength;
+    const combinedSchema = createCombinedAnalysisInputSchema(maxCodeLength);
     const params = ValidationUtils.validateOrThrow(
-      CombinedAnalysisInputSchema,
+      combinedSchema,
       args,
       'analyze_code_combined'
     );
@@ -541,46 +716,97 @@ export class ToolRegistry {
     );
 
     try {
-      // Extract params compatible with individual analysis services
-      // (excludes combined-specific options like parallelExecution, includeIndividualAnalyses)
-      const serviceParams = {
-        prompt: finalParams.prompt,
-        context: finalParams.context,
-        options: finalParams.options
-          ? {
-              timeout: finalParams.options.timeout,
-              severity: finalParams.options.severity,
-              template: finalParams.options.template,
-              preset: finalParams.options.preset,
-              autoDetect: finalParams.options.autoDetect,
-              warnOnMissingContext: finalParams.options.warnOnMissingContext,
+      const cacheKeyParams = this.buildCacheKeyParams('combined', finalParams);
+      const cacheKeyShort = this.cacheService ? generateShortCacheKey(cacheKeyParams) : null;
+
+      const executeCombined = async () => {
+        // Extract params compatible with individual analysis services
+        // (excludes combined-specific options like parallelExecution, includeIndividualAnalyses)
+        const serviceParams = {
+          prompt: finalParams.prompt,
+          context: finalParams.context,
+          options: finalParams.options
+            ? {
+                timeout: finalParams.options.timeout,
+                severity: finalParams.options.severity,
+                template: finalParams.options.template,
+                preset: finalParams.options.preset,
+                autoDetect: finalParams.options.autoDetect,
+                warnOnMissingContext: finalParams.options.warnOnMissingContext,
+              }
+            : undefined,
+        };
+
+        // Execute analyses (parallel or sequential based on option)
+        const analyses = parallelExecution
+          ? await Promise.all([
+              this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
+              this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
+            ])
+          : [
+              await this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
+              await this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
+            ];
+
+        // Filter out undefined results (shouldn't happen, but for type safety)
+        const validAnalyses = analyses.filter((r): r is Exclude<typeof r, void> => r !== undefined);
+
+        if (validAnalyses.length === 0) {
+          throw new Error('No analyses completed successfully');
+        }
+
+        // Aggregate results
+        const aggregated = aggregator.mergeAnalyses(validAnalyses, { includeIndividualAnalyses });
+
+        // Integrate secret scanning results once for combined output
+        if (config.secretScanning?.enabled) {
+          const secretFindings = this.secretScanner.scan(finalParams.prompt);
+          const secretAnalysisFindings = this.secretScanner.toAnalysisFindings(secretFindings);
+
+          if (secretAnalysisFindings.length > 0) {
+            const secretAggregated = secretAnalysisFindings.map(finding => ({
+              ...finding,
+              sources: ['codex', 'gemini'] as Array<'codex' | 'gemini'>,
+              confidence: 'high' as const,
+            }));
+
+            aggregated.findings = [...secretAggregated, ...aggregated.findings];
+
+            for (const finding of secretAggregated) {
+              aggregated.summary.totalFindings++;
+              if (finding.severity === 'critical') aggregated.summary.critical++;
+              else if (finding.severity === 'high') aggregated.summary.high++;
+              else if (finding.severity === 'medium') aggregated.summary.medium++;
+              else if (finding.severity === 'low') aggregated.summary.low++;
             }
-          : undefined,
+
+            const highConfidence = aggregated.findings.filter(f => f.confidence === 'high').length;
+            aggregated.summary.consensus =
+              aggregated.findings.length > 0
+                ? Math.round((highConfidence / aggregated.findings.length) * 100)
+                : 100;
+          }
+        }
+
+        return aggregated;
       };
 
-      // Execute analyses (parallel or sequential based on option)
-      const analyses = parallelExecution
-        ? await Promise.all([
-            this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
-            this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
-          ])
-        : [
-            await this.codexQueue.add(() => codexService.analyzeCode(serviceParams)),
-            await this.geminiQueue.add(() => geminiService.analyzeCode(serviceParams)),
-          ];
-
-      // Filter out undefined results (shouldn't happen, but for type safety)
-      const validAnalyses = analyses.filter((r): r is Exclude<typeof r, void> => r !== undefined);
-
-      if (validAnalyses.length === 0) {
-        throw new Error('No analyses completed successfully');
-      }
-
-      // Aggregate results
-      const aggregated = aggregator.mergeAnalyses(validAnalyses, { includeIndividualAnalyses });
+      const { result: aggregated, fromCache } =
+        this.cacheService && this.cacheService.isEnabled()
+          ? await this.cacheService.getOrSet(cacheKeyParams, executeCombined)
+          : { result: await executeCombined(), fromCache: false };
 
       // Override analysis ID with combined ID
       aggregated.analysisId = analysisId;
+      aggregated.timestamp = new Date().toISOString();
+      aggregated.metadata.fromCache = fromCache;
+      if (cacheKeyShort) {
+        aggregated.metadata.cacheKey = cacheKeyShort;
+      }
+
+      if (fromCache) {
+        logger.info({ analysisId, cacheKey: cacheKeyShort }, 'Combined analysis served from cache');
+      }
 
       // CRITICAL FIX #3: Store aggregated result
       this.analysisStatusStore.setResult(analysisId, aggregated);
@@ -591,7 +817,11 @@ export class ToolRegistry {
         content: [
           {
             type: 'text' as const,
-            text: formatAnalysisAsMarkdown(aggregated),
+            text: formatAnalysisAsMarkdown(aggregated, {
+              maxFindings: config.analysis.maxFindings,
+              maxCodeSnippetLength: config.analysis.maxCodeSnippetLength,
+              maxOutputChars: config.analysis.maxOutputChars,
+            }),
           },
         ],
       };

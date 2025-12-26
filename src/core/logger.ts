@@ -22,6 +22,7 @@ export interface LoggerConfig {
 
 const SENSITIVE_KEYS = ['apiKey', 'token', 'secret', 'password'];
 const CODE_SNIPPET_KEYS = [
+  'prompt',
   'code',
   'source',
   'snippet',

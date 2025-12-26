@@ -36,10 +36,34 @@ export interface AnalysisSummary {
   low: number;
 }
 
+export interface ContextWarning {
+  code: string;
+  severity: 'info' | 'warning';
+  message: string;
+  tip?: string;
+  field: string;
+}
+
+export interface ResolvedContext {
+  threatModel?: string;
+  platform?: string;
+  projectType?: string;
+  language?: string;
+  framework?: string;
+  scope?: string;
+  fileName?: string;
+}
+
 export interface AnalysisMetadata {
   language?: string;
-  linesOfCode: number;
+  linesOfCode?: number;
   analysisDuration: number;
+  fromCache?: boolean;
+  cacheKey?: string;
+  resolvedContext?: ResolvedContext;
+  warnings?: ContextWarning[];
+  templateUsed?: string;
+  autoDetected?: boolean;
 }
 
 export interface CodeAnalysisParams {

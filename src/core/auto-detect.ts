@@ -4,7 +4,7 @@
  */
 
 import { existsSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { readFile, stat } from 'fs/promises';
 import { extname, join } from 'path';
 
 import type { AnalysisContext, Scope } from '../schemas/context.js';
@@ -91,6 +91,11 @@ const FRAMEWORK_DETECTION_MAP: Record<string, string> = {
  * Context Auto-Detector class
  */
 export class ContextAutoDetector {
+  private packageJsonCache = new Map<
+    string,
+    { mtimeMs: number; result: { context: Partial<AnalysisContext>; confidence: Record<string, number> } | null }
+  >();
+
   constructor(private logger: Logger) {}
 
   /**
@@ -193,9 +198,16 @@ export class ContextAutoDetector {
     }
 
     try {
+      const stats = await stat(pkgPath);
+      const cached = this.packageJsonCache.get(pkgPath);
+      if (cached && cached.mtimeMs === stats.mtimeMs) {
+        return cached.result;
+      }
+
       const content = await readFile(pkgPath, 'utf-8');
       const parsed: unknown = JSON.parse(content);
       if (typeof parsed !== 'object' || parsed === null) {
+        this.packageJsonCache.set(pkgPath, { mtimeMs: stats.mtimeMs, result: null });
         return null;
       }
 
@@ -236,9 +248,18 @@ export class ContextAutoDetector {
         }
       }
 
-      return { context, confidence };
+      const result = { context, confidence };
+      this.packageJsonCache.set(pkgPath, { mtimeMs: stats.mtimeMs, result });
+      return result;
     } catch (error) {
       this.logger.debug({ error, pkgPath }, 'Failed to read package.json');
+      // Cache failure to avoid repeated reads until file changes
+      try {
+        const stats = await stat(pkgPath);
+        this.packageJsonCache.set(pkgPath, { mtimeMs: stats.mtimeMs, result: null });
+      } catch {
+        // ignore
+      }
       return null;
     }
   }

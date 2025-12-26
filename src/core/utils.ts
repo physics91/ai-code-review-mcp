@@ -32,6 +32,11 @@ export function sanitizeParams(params: Record<string, unknown>): Record<string, 
     // ALWAYS redact code for security - no size threshold
     sanitized.code = `[${codeLength} characters]`;
   }
+  if ('prompt' in sanitized && typeof sanitized.prompt === 'string') {
+    const promptLength = sanitized.prompt.length;
+    // ALWAYS redact prompt for security - no size threshold
+    sanitized.prompt = `[${promptLength} characters]`;
+  }
 
   return sanitized;
 }
@@ -105,6 +110,11 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
  * Remove ANSI escape codes from CLI output
  */
 export function stripAnsiCodes(value: string): string {
+  // Fast path: no ANSI escape sequence
+  if (!value.includes('\u001b[')) {
+    return value;
+  }
+
   let result = '';
 
   for (let i = 0; i < value.length; i++) {

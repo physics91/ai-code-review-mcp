@@ -21,6 +21,16 @@ export interface CacheKeyParams {
     severity?: string;
     preset?: string;
     template?: string;
+    autoDetect?: boolean;
+    warnOnMissingContext?: boolean;
+  };
+  service?: {
+    model?: string | null;
+    reasoningEffort?: string;
+    search?: boolean;
+    args?: string[];
+    template?: string;
+    version?: string;
   };
 }
 
@@ -35,6 +45,7 @@ export function generateCacheKey(params: CacheKeyParams): string {
     source: params.source,
     context: normalizeContext(params.context),
     options: normalizeOptions(params.options),
+    service: normalizeService(params.service),
   };
 
   const json = JSON.stringify(normalized);
@@ -80,6 +91,26 @@ function normalizeOptions(
     severity: options.severity?.toLowerCase() ?? null,
     preset: options.preset?.toLowerCase() ?? null,
     template: options.template?.toLowerCase() ?? null,
+    autoDetect: options.autoDetect ?? null,
+    warnOnMissingContext: options.warnOnMissingContext ?? null,
+  };
+}
+
+/**
+ * Normalize service config for consistent hashing
+ */
+function normalizeService(
+  service?: CacheKeyParams['service']
+): Record<string, unknown> | null {
+  if (!service) return null;
+
+  return {
+    model: service.model ?? null,
+    reasoningEffort: service.reasoningEffort?.toLowerCase() ?? null,
+    search: service.search ?? null,
+    args: service.args ?? null,
+    template: service.template?.toLowerCase() ?? null,
+    version: service.version ?? null,
   };
 }
 

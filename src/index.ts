@@ -11,8 +11,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ConfigManager } from './core/config.js';
 import { Logger } from './core/logger.js';
 import { AnalysisAggregator } from './services/aggregator/merger.js';
+import { CacheService } from './services/cache/cache.service.js';
 import { CodexAnalysisService } from './services/codex/client.js';
 import { GeminiAnalysisService } from './services/gemini/client.js';
+import { CacheRepository, DatabaseManager } from './storage/index.js';
 import { ToolRegistry } from './tools/registry.js';
 import { PromptRegistry } from './prompts/registry.js';
 
@@ -21,6 +23,9 @@ import { PromptRegistry } from './prompts/registry.js';
  */
 async function main(): Promise<void> {
   let logger: Logger | undefined;
+  let cacheService: CacheService | null = null;
+  let cacheCleanupInterval: NodeJS.Timeout | null = null;
+  let dbManager: DatabaseManager | null = null;
 
   try {
     // Load configuration
@@ -40,6 +45,43 @@ async function main(): Promise<void> {
       name: config.server.name,
       version: config.server.version,
     });
+
+    // Initialize cache + storage if enabled
+    if (config.cache.enabled) {
+      if (config.storage.type === 'sqlite') {
+        dbManager = DatabaseManager.initialize(config.storage.sqlite, logger);
+        const cacheRepo = new CacheRepository(
+          dbManager.getDb(),
+          {
+            maxSize: config.cache.maxSize,
+            defaultTtlMs: config.cache.ttl,
+            touchIntervalMs: config.cache.touchIntervalMs,
+          },
+          logger
+        );
+        cacheService = new CacheService(
+          cacheRepo,
+          {
+            enabled: config.cache.enabled,
+            ttl: config.cache.ttl,
+            maxSize: config.cache.maxSize,
+          },
+          logger
+        );
+
+        const cleanupIntervalMs = config.cache.cleanupIntervalMs ?? 5 * 60 * 1000;
+        if (cleanupIntervalMs > 0) {
+          cacheCleanupInterval = setInterval(() => {
+            cacheService?.cleanup();
+          }, cleanupIntervalMs);
+        }
+      } else {
+        logger.warn(
+          { storageType: config.storage.type },
+          'Cache enabled but storage type is not sqlite; cache disabled'
+        );
+      }
+    }
 
     // Initialize services with context system configuration
     const codexService = config.codex.enabled
@@ -75,6 +117,7 @@ async function main(): Promise<void> {
       aggregator,
       logger,
       config,
+      cacheService: cacheService ?? undefined,
     });
 
     registry.registerTools();
@@ -101,6 +144,14 @@ async function main(): Promise<void> {
     // Handle graceful shutdown
     const shutdown = (): void => {
       logger?.info('Shutting down Code Review MCP Server');
+      if (cacheCleanupInterval) {
+        clearInterval(cacheCleanupInterval);
+        cacheCleanupInterval = null;
+      }
+      if (dbManager) {
+        dbManager.close();
+        dbManager = null;
+      }
       void server
         .close()
         .then(() => process.exit(0))

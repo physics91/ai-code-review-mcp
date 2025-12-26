@@ -22,6 +22,12 @@ export const ServerConfigSchema = z.object({
     retryAttempts: z.number().min(0).max(10).default(3),
     retryDelay: z.number().min(0).default(1000),
     maxConcurrent: z.number().min(1).max(10).default(1),
+    queue: z
+      .object({
+        interval: z.number().min(0).optional(),
+        intervalCap: z.number().min(1).optional(),
+      })
+      .default({}),
     model: z.string().nullable().default('gpt-5'),
     search: z.boolean().default(true),
     reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).default('high'),
@@ -35,6 +41,12 @@ export const ServerConfigSchema = z.object({
     retryAttempts: z.number().min(0).max(10).default(3),
     retryDelay: z.number().min(0).default(1000),
     maxConcurrent: z.number().min(1).max(10).default(1),
+    queue: z
+      .object({
+        interval: z.number().min(0).optional(),
+        intervalCap: z.number().min(1).optional(),
+      })
+      .default({}),
     model: z.string().nullable().default('gemini-3-pro-preview'),
     args: z.array(z.string()).default([]),
   }),
@@ -43,6 +55,9 @@ export const ServerConfigSchema = z.object({
     maxCodeLength: z.number().min(100).max(1000000).default(50000),
     includeContext: z.boolean().default(true),
     defaultLanguage: z.string().nullable().default(null),
+    maxFindings: z.number().min(1).max(10000).default(200),
+    maxCodeSnippetLength: z.number().min(0).max(100000).default(4000),
+    maxOutputChars: z.number().min(0).max(1000000).default(200000),
     formats: z.array(z.enum(['markdown', 'json', 'html'])).default(['markdown', 'json']),
     defaultSeverity: z.enum(['all', 'high', 'medium']).default('all'),
     deduplication: z.object({
@@ -77,6 +92,8 @@ export const ServerConfigSchema = z.object({
     ttl: z.number().min(0).default(3600000),
     maxSize: z.number().min(0).default(1000),
     strategy: z.enum(['lru', 'fifo']).default('lru'),
+    cleanupIntervalMs: z.number().min(0).default(300000),
+    touchIntervalMs: z.number().min(0).default(30000),
   }),
 
   storage: z.object({
@@ -90,6 +107,8 @@ export const ServerConfigSchema = z.object({
 
   secretScanning: z.object({
     enabled: z.boolean().default(true),
+    maxScanLength: z.number().min(0).default(200000),
+    maxLineLength: z.number().min(0).default(10000),
     patterns: z.object({
       aws: z.boolean().default(true),
       gcp: z.boolean().default(true),

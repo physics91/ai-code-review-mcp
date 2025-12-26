@@ -13,6 +13,7 @@
     "retryAttempts": 3,
     "retryDelay": 1000,
     "maxConcurrent": 1,
+    "queue": {},
     "model": "gpt-5.2",
     "search": true,
     "reasoningEffort": "xhigh",
@@ -25,6 +26,7 @@
     "retryAttempts": 3,
     "retryDelay": 1000,
     "maxConcurrent": 1,
+    "queue": {},
     "model": "gemini-3-pro-preview",
     "args": []
   },
@@ -32,6 +34,9 @@
     "maxCodeLength": 50000,
     "includeContext": true,
     "defaultLanguage": null,
+    "maxFindings": 200,
+    "maxCodeSnippetLength": 4000,
+    "maxOutputChars": 200000,
     "formats": ["markdown", "json"],
     "defaultSeverity": "all",
     "deduplication": {
@@ -64,7 +69,9 @@
     "enabled": true,
     "ttl": 3600000,
     "maxSize": 1000,
-    "strategy": "lru"
+    "strategy": "lru",
+    "cleanupIntervalMs": 300000,
+    "touchIntervalMs": 30000
   },
   "storage": {
     "type": "sqlite",
@@ -76,6 +83,8 @@
   },
   "secretScanning": {
     "enabled": true,
+    "maxScanLength": 200000,
+    "maxLineLength": 10000,
     "patterns": {
       "aws": true,
       "gcp": true,

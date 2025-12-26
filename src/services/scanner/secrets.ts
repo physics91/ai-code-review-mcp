@@ -40,6 +40,8 @@ export interface SecretScannerConfig {
   };
   customPatterns?: SecretPattern[];
   excludePatterns?: string[]; // Regex patterns to exclude (e.g., test files)
+  maxScanLength?: number; // Max characters to scan
+  maxLineLength?: number; // Max characters per line to scan
 }
 
 /**
@@ -574,10 +576,21 @@ export class SecretScanner {
     }
 
     const findings: SecretFinding[] = [];
-    const lines = code.split('\n');
+
+    const maxScanLength = this.config.maxScanLength ?? 200000;
+    let scanCode = code;
+    if (scanCode.length > maxScanLength) {
+      scanCode = scanCode.substring(0, maxScanLength);
+      this.logger.debug(
+        { fileName, originalLength: code.length, maxScanLength },
+        'Secret scanning input truncated for performance'
+      );
+    }
+
+    const lines = scanCode.split('\n');
 
     // ReDoS protection: max line length to prevent catastrophic backtracking
-    const MAX_LINE_LENGTH = 10000;
+    const maxLineLength = this.config.maxLineLength ?? 10000;
 
     for (const pattern of this.patterns) {
       try {
@@ -592,8 +605,8 @@ export class SecretScanner {
           if (!line) continue;
 
           // ReDoS protection: truncate extremely long lines
-          if (line.length > MAX_LINE_LENGTH) {
-            line = line.substring(0, MAX_LINE_LENGTH);
+          if (line.length > maxLineLength) {
+            line = line.substring(0, maxLineLength);
             this.logger.debug(
               { lineIndex: lineIndex + 1, originalLength: lines[lineIndex]?.length },
               'Line truncated for ReDoS protection'
